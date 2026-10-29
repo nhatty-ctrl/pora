@@ -1,713 +1,4066 @@
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 
 type Screen = 'disc' | 'earn' | 'prof' | 'pers' | 'camp' | 'join' | 'new' | 'wd' | 'dev';
 type CampaignTab = 'd' | 'j' | 'c';
-type Card = { id: number; brand: string; label: string; expires: string };
+type PersonalTab = 'c' | 'r' | 'p' | 'i' | 's';
+type PersonalSettingsTab = 'd' | 'v' | 'b';
+type DevTab = 'asc' | 'sdk';
 
-const DESIGN_WIDTH = 1360;
-const readCampaignTab = (): CampaignTab => {
-  if (typeof window === 'undefined') return 'd';
-  const tab = new URLSearchParams(window.location.search).get('campaigns');
-  return tab === 'j' || tab === 'c' ? tab : 'd';
-};
+interface Card {
+  id: number;
+  b: string;
+  l: string;
+  e: string;
+}
 
-const campaigns = [
-  { name: 'Palazzo Lens', color: '#e4d8ff', icon: 'ti-aperture', category: 'Photo and video', share: '20%', detail: 'First payment plus 6 months of renewals', end: 'Ends Nov 27', founder: 'Maya Chen', desc: 'Palazzo Lens turns ordinary shots into polished portraits in seconds. Creators earn a share of every subscription they bring in, with no minimum audience and no exclusivity.' },
-  { name: 'Tidal', color: '#cfe8dc', icon: 'ti-wave-sine', category: 'Productivity', share: '25%', detail: 'First payment plus 6 months of renewals', end: 'Ends Dec 3', founder: 'Dawit Bekele', desc: 'Tidal is a focus timer that follows your natural energy through the day. Share your link, earn a share of every subscription, and watch results arrive in real time.' },
-  { name: 'Lumen Habit', color: '#ffd9e8', icon: 'ti-sun', category: 'Health', share: '15%', detail: 'First payment plus 6 months of renewals', end: 'Ends Nov 30', founder: 'Hana Mulugeta', desc: 'Lumen Habit helps people build small routines that stick, with gentle reminders and weekly summaries. A great fit for wellness and lifestyle creators.' },
+const CATEGORIES = [
+  'All Categories',
+  'Productivity',
+  'Photo and video',
+  'Finance',
+  'Social',
+  'Games',
+  'Health',
+  'Education',
 ];
-const categories = ['All Categories', 'Productivity', 'Photo and video', 'Finance', 'Social', 'Games', 'Health', 'Education'];
-const fmt = (n: number) => `$${n.toFixed(2)}`;
-const Icon = ({ name, className = '' }: { name: string; className?: string }) => <i aria-hidden="true" className={`ti ${name} ${className}`} />;
-const BrandMark = ({ size = 24 }: { size?: number }) => <img src="/assets/brand-logo.png" alt="Logo" style={{ height: size, width: 'auto' }} className="object-contain" />;
-const RetroAvatar = ({ size = 128 }: { size?: number }) => <img src="/assets/avatar-retro-circle.png" alt="Profile avatar" style={{ width: size, height: size }} className="rounded-full object-cover" />;
-const NavAvatar = ({ size = 22 }: { size?: number }) => <img src="/assets/avatar-retro-circle.png" alt="Profile" style={{ width: size, height: size }} className="rounded-full object-cover" />;
-const Avatar = ({ color = '#9be3c6', size = 42 }: { color?: string; size?: number }) => <span className="inline-flex flex-none items-center justify-center gap-[5px] rounded-full" style={{ width: size, height: size, background: color }}><b className="h-3 w-[6px] rounded-full bg-[#101010]" /><b className="h-3 w-[6px] rounded-full bg-[#101010]" /></span>;
 
-function Chart({ empty = false, labels = ['Sep 29', 'Oct 5', 'Oct 11', 'Oct 17', 'Oct 23'], width = 984 }: { empty?: boolean; labels?: string[]; width?: number }) {
-  const points = useMemo(() => Array.from({ length: 28 }, (_, i) => [28 + i * (width - 114) / 27, 24 + 148 + 76 * Math.sin(i / 3.4 + 2) + 36 * Math.sin(i / 1.4 + 4)] as const), [width]);
-  const d = points.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join(' ');
-  return <div className="graph mt-[26px]">
-    <svg viewBox={`0 0 ${width} 300`} className="block w-full" style={{ cursor: 'crosshair' }} aria-label="Performance chart">
-      {[20, 130, 240].map(y => <line key={y} x1="28" x2={width - 86} y1={y} y2={y} stroke="#1d1d20" />)}
-      {empty ? <><text x={width / 2} y="137" fill="#a6a6aa" fontSize="19" textAnchor="middle">No data yet</text><text x={width / 2} y="162" fill="#6f6f74" fontSize="16" textAnchor="middle">Claim your code to start tracking.</text></> : <path d={d} fill="none" stroke="#C9B8FF" strokeWidth="2.5" />}
-      {labels.map((label, i) => <text key={label} x={28 + i * (width - 114) / (labels.length - 1)} y="282" fill="#7d7d82" fontSize="15" textAnchor={i === 0 ? 'start' : i === labels.length - 1 ? 'end' : 'middle'}>{label}</text>)}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const REGIONAL_PAYMENTS = [
+  'Alipay',
+  'Bancontact',
+  'FPX',
+  'iDEAL',
+  'Konbini',
+  'PayNow',
+  'Pix',
+  'Przelewy24',
+  'Swish',
+  'TWINT',
+  'UPI',
+  'WeChat Pay',
+  'Zip',
+];
+
+const NOTIFICATIONS = [
+  {
+    title: 'Palazzo Lens',
+    time: '4d',
+    text: 'You’re approved to promote this campaign',
+    quote: '',
+    bg: '#e4d8ff',
+    icon: 'ti-aperture',
+  },
+  {
+    title: 'Tidal',
+    time: 'Oct 20',
+    text: 'sent an announcement for Tidal: Reward update',
+    quote:
+      'Thank you for sharing your links. The revenue share goes up this week, and we’ve had an incredible response from creators so far.',
+    bg: '#cfe8dc',
+    icon: 'ti-wave-sine',
+  },
+  {
+    title: 'Palazzo Lens',
+    time: 'Oct 18',
+    text: 'Your first subscriber paid',
+    quote: 'That’s $5.00 earned. It will be payable after the 30-day refund hold.',
+    bg: '#e4d8ff',
+    icon: 'ti-aperture',
+  },
+  {
+    title: 'umi',
+    time: 'Oct 15',
+    text: 'Your payout of $48.50 was sent',
+    quote: 'It should reach your account within 2 to 3 business days.',
+    bg: '#fff',
+    icon: '',
+  },
+  {
+    title: 'Pocket Ledger',
+    time: 'Oct 12',
+    text: 'paused this campaign',
+    quote: 'Subscriptions from today won’t earn a share until the founder resumes it.',
+    bg: '#ffe1c8',
+    icon: 'ti-notebook',
+  },
+];
+
+const SDK_STEPS = [
+  {
+    title: 'Install the SDK',
+    code: '<span class="c2">// Swift Package Manager (placeholder URL)</span>\n<span class="g2">https://github.com/umi/umi-ios</span>',
+  },
+  {
+    title: 'Configure it at launch',
+    code: '<span class="k">Umi</span>.configure(appKey: <span class="g2">"umi_app_pl_8f2kQ4mT9x"</span>)',
+  },
+  {
+    title: 'Resolve the referral',
+    code: '<span class="k">Umi</span>.resolveReferral()\n<span class="c2">// If nothing arrives, let people type a creator code:</span>\n<span class="k">Umi</span>.claimCreatorCode(code)',
+  },
+  {
+    title: 'Bind and report purchases',
+    code: '<span class="k">Umi</span>.bind(appAccountToken: token)\n<span class="c2">// after a purchase</span>\n<span class="k">Umi</span>.reportTransaction(transaction.id)',
+  },
+];
+
+function generatePoints(seed: number, base: number, count = 28): number[] {
+  const arr: number[] = [];
+  for (let i = 0; i < count; i++) {
+    arr.push(
+      base *
+        (0.62 +
+          0.26 * Math.sin(i / 3.4 + seed) +
+          0.12 * Math.sin(i / 1.4 + seed * 2) +
+          i * 0.007)
+    );
+  }
+  return arr;
+}
+
+function formatVal(v: number, prefix: string): string {
+  const r =
+    v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v < 10 ? v.toFixed(1) : Math.round(v).toString();
+  return prefix + r;
+}
+
+function formatMoney(n: number): string {
+  return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function renderQrSvg(seed: number, size: number) {
+  const N = 29;
+  let sd = seed;
+  const rnd = () => {
+    sd = (sd * 9301 + 49297) % 233280;
+    return sd / 233280;
+  };
+  const m: boolean[][] = [];
+  for (let y = 0; y < N; y++) {
+    m[y] = [];
+    for (let x = 0; x < N; x++) {
+      m[y][x] = rnd() > 0.52;
+    }
+  }
+  const fp = (ox: number, oy: number) => {
+    for (let y = -1; y < 8; y++) {
+      for (let x = -1; x < 8; x++) {
+        const X = ox + x;
+        const Y = oy + y;
+        if (X < 0 || Y < 0 || X >= N || Y >= N) continue;
+        m[Y][X] =
+          x >= 0 &&
+          x < 7 &&
+          y >= 0 &&
+          y < 7 &&
+          (x === 0 || x === 6 || y === 0 || y === 6 || (x >= 2 && x <= 4 && y >= 2 && y <= 4));
+      }
+    }
+  };
+  fp(0, 0);
+  fp(N - 7, 0);
+  fp(0, N - 7);
+
+  const rects: { x: number; y: number }[] = [];
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      if (m[y][x]) rects.push({ x, y });
+    }
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 29 29" shapeRendering="crispEdges">
+      {rects.map((r, i) => (
+        <rect key={i} x={r.x} y={r.y} width={1} height={1} fill="#0a0a0a" />
+      ))}
     </svg>
-  </div>;
+  );
 }
 
-function Stats({ items }: { items: [string, string, string, string?][] }) {
-  return <div className="mt-[30px] flex h-[112px]">
-    {items.map(([title, value, note, icon]) => <div className="stat" key={title}>
-      <div className="a1">{icon && <Icon name={icon} className="text-[18px]" />}{title}</div>
-      <div className="a2">{value}</div><div className="a3">{note}</div>
-    </div>)}
-  </div>;
+interface ChartConfig {
+  vw: number;
+  vh: number;
+  dts: string[];
+  empty: boolean;
+  em?: string;
+  order: string[];
+  defs: Record<string, { n: string; d: number[]; p: string }>;
 }
 
-function App() {
-  const [screen, setScreen] = useState<Screen>('disc');
-  const [viewportWidth, setViewportWidth] = useState(() => typeof window === 'undefined' ? DESIGN_WIDTH : window.innerWidth);
-  const [viewportHeight, setViewportHeight] = useState(() => typeof window === 'undefined' ? 940 : window.innerHeight);
-  const [stageHeight, setStageHeight] = useState(940);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const appRef = useRef<HTMLDivElement>(null);
-  const [subTab, setSubTab] = useState('c');
-  const [settingsTab, setSettingsTab] = useState('d');
-  const [devTab, setDevTab] = useState('asc');
-  const [search, setSearch] = useState('');
-  const [campaignTab, setCampaignTab] = useState<CampaignTab>(readCampaignTab);
-  const [categorySet, setCategorySet] = useState<string[]>(['All Categories']);
-  const [calendar, setCalendar] = useState({ year: 2026, month: 9 });
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [profileName, setProfileName] = useState('Nathaniel Ber');
-  const [firstName, setFirstName] = useState('Nathaniel');
-  const [lastName, setLastName] = useState('Ber');
-  const [handle, setHandle] = useState('nhatty-ctrl');
-  const [bio, setBio] = useState('');
-  const [location, setLocation] = useState('');
-  const [socialLink, setSocialLink] = useState('LinkedIn and 1 more');
-  const [followers, setFollowers] = useState(0);
-  const [following, setFollowing] = useState(1);
-  const [emailNotif, setEmailNotif] = useState(true);
-  const [eventNotif, setEventNotif] = useState(true);
-  const [chatGoalAlerts, setChatGoalAlerts] = useState(false);
-  const [orgAccount, setOrgAccount] = useState(false);
-  const [query, setQuery] = useState('Earned');
-  const [metricOpen, setMetricOpen] = useState(false);
-  const [requested, setRequested] = useState(false);
-  const [claimed, setClaimed] = useState(false);
-  const [copied, setCopied] = useState('');
-  const [campaignName, setCampaignName] = useState('');
-  const [createdName, setCreatedName] = useState('Palazzo Lens');
-  const [funded, setFunded] = useState(true);
-  const [appleConnected, setAppleConnected] = useState(true);
-  const [sdkConnected, setSdkConnected] = useState(true);
-  const [amount, setAmount] = useState('99.50');
-  const [balance, setBalance] = useState(99.5);
-  const [cards, setCards] = useState<Card[]>([{ id: 1, brand: 'VISA', label: 'Visa ••••4417', expires: '08/28' }]);
-  const [selectedCard, setSelectedCard] = useState(1);
-  const [addingCard, setAddingCard] = useState(false);
-  const [cardName, setCardName] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry] = useState('');
-  const [cvc, setCvc] = useState('');
-  const [cardError, setCardError] = useState('');
-  const [withdrawError, setWithdrawError] = useState('');
-  const [withdrawDone, setWithdrawDone] = useState(false);
-  const [toast, setToast] = useState('');
-  const [devError, setDevError] = useState('');
-  const [bundleId, setBundleId] = useState('');
-  const [issuerId, setIssuerId] = useState('');
-  const [keyId, setKeyId] = useState('');
-  const [keyFile, setKeyFile] = useState(false);
-  const [eventSent, setEventSent] = useState(false);
+function SvgChart({
+  config,
+  currentKey,
+  onSelectKey,
+}: {
+  config: ChartConfig;
+  currentKey: string;
+  onSelectKey: (k: string) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(''), 1800);
-    return () => window.clearTimeout(t);
-  }, [toast]);
-  const scale = viewportWidth < 1100 ? Math.min(1, Math.max(0.65, viewportWidth / 1100)) : 1;
-  useEffect(() => {
-    const updateViewport = () => {
-      setViewportWidth(window.innerWidth);
-      setViewportHeight(window.innerHeight);
-    };
-    const updateTabFromUrl = () => setCampaignTab(readCampaignTab());
-    window.addEventListener('resize', updateViewport);
-    window.addEventListener('popstate', updateTabFromUrl);
-    return () => {
-      window.removeEventListener('resize', updateViewport);
-      window.removeEventListener('popstate', updateTabFromUrl);
-    };
-  }, []);
-  const selectCampaignTab = (tab: CampaignTab) => {
-    setCampaignTab(tab);
-    const url = new URL(window.location.href);
-    if (tab === 'd') url.searchParams.delete('campaigns');
-    else url.searchParams.set('campaigns', tab);
-    window.history.pushState({}, '', `${url.pathname}${url.search}${url.hash}`);
+  const { vw, vh, dts, empty, em, order, defs } = config;
+  const def = defs[currentKey] || defs[order[0]];
+  const data = def.d;
+  const n = data.length;
+
+  const X0 = 28;
+  const W = vw - 114;
+  const Y0 = 20;
+  const H = vh - 80;
+
+  const mx = useMemo(() => {
+    return Math.max(...data) * 1.15;
+  }, [data]);
+
+  const points = useMemo(() => {
+    return data.map((v, i) => [X0 + (i * W) / (n - 1), Y0 + H - (v / mx) * H] as [number, number]);
+  }, [data, mx, X0, W, Y0, H, n]);
+
+  const pathD = useMemo(() => {
+    if (points.length === 0) return '';
+    let p = `M${points[0][0]} ${points[0][1]}`;
+    for (let i = 1; i < points.length - 1; i++) {
+      const a = (points[i][0] + points[i + 1][0]) / 2;
+      const b = (points[i][1] + points[i + 1][1]) / 2;
+      p += ` Q${points[i][0]} ${points[i][1]} ${a} ${b}`;
+    }
+    const L = points[points.length - 1];
+    p += ` L${L[0]} ${L[1]}`;
+    return p;
+  }, [points]);
+
+  const handleMouseMove = (e: MouseEvent<SVGSVGElement>) => {
+    if (empty || !svgRef.current || points.length === 0) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * vw;
+    const idx = Math.max(0, Math.min(n - 1, Math.round(((x - X0) / W) * (n - 1))));
+    setHoverIndex(idx);
   };
-  const go = (to: Screen, tab?: string) => {
-    setNotificationOpen(false); setSettingsOpen(false); setMoreOpen(false); setScreen(to);
-    if (to === 'pers' && tab) setSubTab(tab);
-    if (to === 'dev' && tab) setDevTab(tab);
-    if (to === 'wd') { setWithdrawDone(false); setWithdrawError(''); setAmount(balance.toFixed(2)); }
+
+  const handleMouseLeave = () => {
+    setHoverIndex(null);
   };
-  const live = appleConnected && sdkConnected && funded;
-  const matching = campaigns.filter(c => (!search || c.name.toLowerCase().includes(search.toLowerCase())) &&
-    (campaignTab !== 'd' || categorySet.includes('All Categories') || categorySet.includes(c.category)));
-  const isCompact = notificationOpen;
-  const nav = (active: Screen) => <aside className={`rail ${isCompact ? 'compact' : ''}`}>
-    <div className={`absolute ${isCompact ? 'left-[17px]' : 'left-[15px]'} top-4`}><BrandMark size={22} /></div>
-    <div className="rl">
-      <div className={`it ${active === 'disc' && !notificationOpen ? 'active' : ''}`} onClick={() => go('disc')} role="button" tabIndex={0} data-testid="nav-campaigns" title="Campaigns">
-        <Icon name="ti-calendar-event" /><span>Campaigns</span>
-      </div>
-      <div className={`it ${active === 'earn' && !notificationOpen ? 'active' : ''}`} onClick={() => go('earn')} role="button" tabIndex={0} data-testid="nav-earnings" title="Earnings">
-        <Icon name="ti-coin" /><span>Earnings</span>
-      </div>
-      <div className="it" onClick={() => { if (active !== 'disc') go('disc'); setTimeout(() => { const el = document.querySelector('input[data-testid="input-campaign-search"]') as HTMLInputElement; el?.focus(); }, 50); }} role="button" tabIndex={0} data-testid="nav-search" title="Search">
-        <Icon name="ti-search" /><span>Search</span>
-      </div>
-      <div className={`it ${notificationOpen ? 'active' : ''}`} onClick={() => { setMoreOpen(false); setNotificationOpen(v => !v); }} role="button" tabIndex={0} data-testid="nav-notifications" title="Notifications">
-        <Icon name="ti-bell" /><span>Notifications</span>
-      </div>
-      <div className={`it ${active === 'prof' && !notificationOpen ? 'active' : ''}`} onClick={() => go('prof')} role="button" tabIndex={0} data-testid="nav-profile" title="Profile">
-        <NavAvatar size={20} /><span>Profile</span>
-      </div>
-    </div>
-    <div className={`it absolute bottom-4 ${isCompact ? 'left-[4px]' : 'left-0'}`} onClick={() => setMoreOpen(v => !v)} role="button" tabIndex={0} data-testid="button-more" title="More">
-      <Icon name="ti-menu-2" /><span>More</span>
-    </div>
-  </aside>;
-  const Header = ({ title, right }: { title: string; right?: ReactNode }) => <div className="hh flex h-10 items-center justify-between"><div className="h1">{title}</div>{right}</div>;
-  const campaignTile = (c: typeof campaigns[number], click: () => void, subtitle?: string) => <div className="campaign-item" onClick={click} role="button" tabIndex={0} key={`${c.name}-${subtitle || ''}`}>
-    <div className="flex gap-3"><div className="campaign-icon" style={{ background: c.color }}><Icon name={c.icon} /></div><div className="pt-1"><div className="campaign-title">{c.name}<span className="inline-flex h-[14px] w-[14px] items-center justify-center rounded-full bg-[#c9b8ff] text-[9px] text-[#0a0a0a]"><Icon name="ti-check" /></span></div><div className="mt-[2px] text-[15px] leading-[19px] text-[#a6a6aa]">{subtitle || `${c.share} of subscription revenue · ${c.end}`}</div></div></div>
-    <div className="mt-2 flex h-5 items-center gap-2 text-[14px] text-[#9a9a9f]"><Icon name="ti-user" />{c.founder} · {c.category}</div><div className="mt-[6px] text-[14px] leading-5 text-[#e8e8ea]">{c.desc.slice(0, 142)}… <b className="font-semibold text-white">see more</b></div>
-  </div>;
-  const cashStat: [string, string, string, string?][] = [['Pending', '$12.00', 'In the 30-day hold', 'ti-clock'], ['Payable', '$6.00', 'Next weekly payout run', 'ti-calendar-event'], ['Paid out', '$188.00', 'Sent to your Stripe balance', 'ti-send'], ['Reversed', '$4.20', '2 refunded payments', 'ti-arrow-back-up']];
 
-  const discovery = <section className="scr on">
-    {nav('disc')}
-    <div className="ml-[230px] flex gap-10 px-8 pb-20 pt-5 max-w-[1240px]">
-      <div className="w-[540px] flex-none">
-        <div className="flex h-[28px] items-center justify-between">
-          <div className="text-[20px] font-semibold leading-[26px]">Campaigns</div>
-          <div className="relative"><Icon name="ti-search" className="absolute left-3 top-[8px] text-[16px] text-[#6f6f74]" /><input className="h-8 w-[240px] rounded-[9px] border border-[#242427] bg-transparent pl-[34px] pr-3 text-[14px] text-white outline-none placeholder:text-[#6f6f74]" placeholder="Search campaigns" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-campaign-search" /></div>
-        </div>
-        <div className="mt-[15px] flex h-[32px] gap-5 border-b border-transparent" role="tablist" aria-label="Campaign sections">{([
-          ['Discover', 'd'], ['Joined', 'j'], ['Created', 'c'],
-        ] as const).map(([label, value]) => <button
-          key={value}
-          id={`campaign-tab-${value}`}
-          type="button"
-          role="tab"
-          aria-selected={campaignTab === value}
-          aria-controls="campaign-tab-panel"
-          data-testid={`campaign-tab-${value}`}
-          className={`flex h-[32px] cursor-pointer items-center border-b-2 bg-transparent text-[15px] font-medium ${campaignTab === value ? 'border-white text-white' : 'border-transparent text-[#8d8d92]'}`}
-          onClick={() => selectCampaignTab(value)}
-        >{label}</button>)}</div>
-        <div id="campaign-tab-panel" role="tabpanel" aria-labelledby={`campaign-tab-${campaignTab}`} data-testid={`campaign-panel-${campaignTab}`}>
-          {campaignTab === 'd' ? <><div className="mt-[30px] flex h-[26px] items-center justify-between text-[20px] font-semibold"><span>Featured</span><span className="flex gap-5 text-[16px] text-[#8d8d92]"><Icon name="ti-chevron-left" /><Icon name="ti-chevron-right" /></span></div>{matching.filter(c => c.name === 'Palazzo Lens').map(c => campaignTile(c, () => go('camp')))}<div className="mt-[30px] flex h-[32px] items-start justify-between border-b border-[#161618] pb-3 text-[20px] font-semibold">New this week</div>{matching.filter(c => c.name !== 'Palazzo Lens').map(c => campaignTile(c, () => go('camp'), `${c.share} of subscription revenue · ${c.end} · NEW`))}</> :
-            <><div className="mt-[30px] text-[20px] font-semibold">{campaignTab === 'j' ? 'Joined' : 'Created'}</div>{campaignTab === 'j' ? campaignTile(campaigns[0], () => go('join'), 'Approved · 18 paying subscribers · $90.00 earned') : campaignTile({ ...campaigns[0], name: createdName, founder: 'You' }, () => go('pers', 'i'), `${live ? 'Live' : 'Setting up'} · 20% of subscription revenue`)}</>}
-        </div>
-      </div>
-      <div className="w-[270px] flex-none">
-        <button className="nb h-8 w-full rounded-[9px] border border-[#242427] text-[14px] font-semibold" onClick={() => go('new')} data-testid="button-new-campaign">New Campaign <Icon name="ti-chevron-down" className="text-[13px]" /></button>
-        <div className="card mt-[18px] p-4 pb-5">
-          <div className="flex h-[34px] items-center justify-between px-2 text-[17px] font-semibold"><span>{new Date(calendar.year, calendar.month).toLocaleString('en-US', { month: 'short' })} {calendar.year}</span><span className="flex gap-[14px] text-[15px] text-[#a6a6aa]"><button onClick={() => setCalendar(c => c.month ? { ...c, month: c.month - 1 } : { year: c.year - 1, month: 11 })}><Icon name="ti-chevron-left" /></button><button onClick={() => setCalendar(c => c.month < 11 ? { ...c, month: c.month + 1 } : { year: c.year + 1, month: 0 })}><Icon name="ti-chevron-right" /></button></span></div>
-          <div className="mt-1 grid grid-cols-7 text-center text-[12px] text-[#7d7d82]">{['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => <span key={d} className="flex h-[30px] items-center justify-center">{d}</span>)}</div>
-          <div className="grid grid-cols-7 text-center">{Array.from({ length: 42 }, (_, i) => { const first = new Date(calendar.year, calendar.month, 1).getDay(); const days = new Date(calendar.year, calendar.month + 1, 0).getDate(); const n = i - first + 1; return <span key={i} className={`mx-auto flex h-[31px] w-[31px] items-center justify-center rounded-full text-[14px] ${n < 1 || n > days ? 'text-[#6a6a6e]' : calendar.year === 2026 && calendar.month === 9 && n === 27 ? 'bg-[#26262a]' : ''}`}>{n < 1 ? new Date(calendar.year, calendar.month, 0).getDate() + n : n > days ? n - days : n}</span>; })}</div>
-          <div className="mt-4 h-px bg-[#1f1f22]" /><div className="mt-5 pl-2 text-[17px] font-semibold">Categories</div>
-          <div className="mt-2">{categories.map(c => <div key={c} onClick={() => setCategorySet(old => c === 'All Categories' ? [c] : old.includes(c) ? (old.filter(x => x !== c).length ? old.filter(x => x !== c) : ['All Categories']) : [...old.filter(x => x !== 'All Categories'), c])} className="flex h-[28px] cursor-pointer items-center gap-[11px] pl-[6px] text-[14px]">
-            <span className={`flex h-[17px] w-[17px] items-center justify-center rounded-[4px] border text-[11px] ${categorySet.includes(c) ? 'border-[#c9b8ff] bg-[#c9b8ff] text-[#0a0a0a]' : 'border-[#4a4a4f]'}`}>{categorySet.includes(c) && <Icon name="ti-check" />}</span><span className={categorySet.includes(c) ? '' : 'text-[#a6a6aa]'}>{c}</span>
-          </div>)}</div>
-        </div>
-      </div>
-    </div>
-  </section>;
-
-  const earnings = <section className="scr on">{nav('earn')}<div className="ml-[230px] max-w-[1040px] px-8 pb-24 pt-5">
-    <Header title="Earnings" right={<button className="btn white h-12 px-6 text-[20px]" onClick={() => go('wd')}><Icon name="ti-arrow-up-right" />Withdraw</button>} />
-    <div className="mt-[34px] text-[18px] leading-[26px] text-[#bdbdc1]">Available to withdraw</div><div className="flex items-baseline gap-[14px]"><span className="text-[64px] font-medium leading-[76px] tracking-[-1px]">{fmt(balance)}</span><span className="text-[18px] text-[#a6a6aa]">USD in your Stripe balance</span></div>
-    <Stats items={cashStat} /><div className="info"><Icon name="ti-info-circle" />Earnings are held for 30 days to cover refunds, then paid out in the weekly run.</div><div className="divider" />
-        <div className="mt-[38px] flex h-[38px] items-center justify-between"><div className="h2">Performance</div><div className="flex gap-[6px]"><div className="relative"><button className="btn w-[190px] justify-between" onClick={() => setMetricOpen(v=>!v)}>{query}<Icon name="ti-chevron-down" /></button>{metricOpen&&<div className="pop-menu">{['Earned','Paying subscribers'].map(v=><button key={v} className={query===v?'selected':''} onClick={()=>{setQuery(v);setMetricOpen(false)}}>{v}</button>)}</div>}</div><button className="btn w-[140px]">Last 28 days <Icon name="ti-chevron-down" /></button></div></div>
-    <Chart /><div className="divider" /><div className="h2 mt-[39px]">By Campaign</div><div className="sub mt-[3px]">What each campaign has earned you.</div>
-    <div className="mt-[18px]"><div className="grid h-[46px] grid-cols-[1fr_130px_140px_140px] items-center px-1 text-[16px] font-medium text-[#7d7d82]"><span>Campaign</span><span className="text-right">Share</span><span className="text-right">Subscribers</span><span className="text-right">Earned</span></div>
-      {campaigns.map((c, i) => <div key={c.name} className="grid h-[72px] grid-cols-[1fr_130px_140px_140px] items-center border-t border-[#1f1f22] px-1 text-[19px]"><span className="flex items-center gap-[14px]"><span className="flex h-11 w-11 items-center justify-center rounded-[11px] text-[22px] text-[#17141f]" style={{ background: c.color }}><Icon name={c.icon} /></span><b className="text-[20px] font-medium">{c.name}</b></span><span className="text-right text-[#a6a6aa]">{c.share}</span><span className="text-right">{[18,12,6][i]}</span><span className="text-right font-medium">{['$90.00','$67.00','$31.00'][i]}</span></div>)}
-    </div>
-  </div></section>;
-
-  const profile = <section className="scr on">{nav('prof')}<div className="ml-[210px] flex min-h-screen">
-    <div className="relative w-[780px] flex-none">
-      <div className="h-[215px] w-full bg-[#18181b]" />
-      <div className="absolute left-[32px] top-[152px] z-10 flex h-[130px] w-[130px] items-center justify-center rounded-full bg-[#0a0a0a]">
-        <RetroAvatar size={130} />
-      </div>
-
-      <div className="absolute right-[32px] top-[236px] z-10 flex items-center gap-2.5">
-        {!editing ? <>
-          <button
-            type="button"
-            data-testid="button-profile-settings"
-            className="rounded-lg border border-[#27272a] bg-[#141416] px-4 py-1.5 text-[14px] font-medium text-white transition-colors hover:bg-[#1f1f23] cursor-pointer"
-            onClick={() => setSettingsOpen(true)}
-          >
-            Settings
-          </button>
-          <button
-            type="button"
-            data-testid="button-profile-edit"
-            className="rounded-lg border border-[#27272a] bg-[#141416] px-4 py-1.5 text-[14px] font-medium text-white transition-colors hover:bg-[#1f1f23] cursor-pointer"
-            onClick={() => setEditing(true)}
-          >
-            Edit Profile
-          </button>
-        </> : <>
-          <button
-            type="button"
-            data-testid="button-profile-cancel"
-            className="rounded-lg border border-[#27272a] bg-[#141416] px-4 py-1.5 text-[14px] font-medium text-white transition-colors hover:bg-[#1f1f23] cursor-pointer"
-            onClick={() => {
-              setFirstName(profileName.split(' ')[0] || '');
-              setLastName(profileName.split(' ').slice(1).join(' ') || '');
-              setEditing(false);
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-testid="button-profile-save"
-            className="rounded-lg bg-[#c9b8ff] px-6 py-1.5 text-[14px] font-medium text-[#0a0a0a] transition-colors hover:bg-[#b8a3f8] cursor-pointer"
-            onClick={() => {
-              const full = `${firstName} ${lastName}`.trim() || 'Nathaniel Ber';
-              setProfileName(full);
-              setEditing(false);
-              setToast('Profile updated');
-            }}
-          >
-            Save
-          </button>
-        </>}
-      </div>
-
-      <div className="absolute left-[32px] top-[298px] pr-8">
-        {!editing ? <>
-          <h1 className="text-[28px] font-bold tracking-tight text-white leading-tight">{profileName}</h1>
-          <div className="mt-1 text-[15px] text-[#8d8d92]">{handle}</div>
-          <div className="mt-4 flex items-center gap-2 text-[14.5px] font-medium text-white">
-            <Icon name="ti-link" className="text-[16px] text-white" />
-            <span>{socialLink}</span>
-          </div>
-          <div className="mt-4 flex items-center gap-4 text-[14.5px] text-[#8d8d92]">
-            <span><strong className="font-semibold text-white">{followers}</strong> followers</span>
-            <span><strong className="font-semibold text-white">{following}</strong> following</span>
-          </div>
-        </> : <>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={firstName}
-              onChange={e => setFirstName(e.target.value)}
-              placeholder="First"
-              className="h-10 w-32 rounded-lg border border-[#2a2a2e] bg-[#121214] px-3 text-[20px] font-bold text-white outline-none focus:border-[#c9b8ff]"
-            />
-            <input
-              type="text"
-              value={lastName}
-              onChange={e => setLastName(e.target.value)}
-              placeholder="Last"
-              className="h-10 w-28 rounded-lg border border-[#2a2a2e] bg-[#121214] px-3 text-[20px] font-bold text-white outline-none focus:border-[#c9b8ff]"
-            />
-          </div>
-          <div className="mt-2 text-[15px] text-[#8d8d92]">{handle}</div>
-          <div className="mt-4">
-            <input
-              type="text"
-              value={bio}
-              onChange={e => setBio(e.target.value)}
-              placeholder="Add a description..."
-              className="h-10 w-[380px] rounded-lg border border-[#2a2a2e] bg-[#121214] px-3 text-[14.5px] text-white placeholder-[#5d5d62] outline-none focus:border-[#c9b8ff]"
-            />
-          </div>
-          <div className="mt-4">
-            <button
-              type="button"
-              className="text-[14.5px] font-medium text-white hover:underline cursor-pointer"
-              onClick={() => setToast('Edit social links')}
-            >
-              Edit Social Links
-            </button>
-          </div>
-          <div className="mt-4">
-            <button
-              type="button"
-              className="flex items-center gap-1.5 text-[14.5px] text-[#8d8d92] hover:text-white cursor-pointer"
-              onClick={() => setToast('Location picker')}
-            >
-              <Icon name="ti-map-pin" className="text-[16px]" />
-              <span>{location || 'Add location'}</span>
-            </button>
-          </div>
-        </>}
-      </div>
-    </div>
-
-    <div className="w-[360px] flex-none border-l border-[#1a1a1c] px-6 pt-5 min-h-screen">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-[19px] font-semibold text-white">All Inbound</h2>
-          <button
-            type="button"
-            onClick={() => setToast('Refreshed conversations')}
-            title="Refresh"
-            className="text-[#8d8d92] hover:text-white transition-colors cursor-pointer"
-          >
-            <Icon name="ti-refresh" className="text-[16px]" />
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={() => setToast('Filter conversations')}
-          title="Filter"
-          className="text-[#8d8d92] hover:text-white transition-colors cursor-pointer"
-        >
-          <Icon name="ti-menu-2" className="text-[17px]" />
-        </button>
-      </div>
-      <div className="mt-40 text-center text-[15px] text-[#8d8d92]">
-        No conversations yet
-      </div>
-    </div>
-  </div></section>;
-
-  const tabs = [['Campaigns','c'],['Creators','r'],['Payment','p'],['Insights','i'],['Settings','s']];
-  const personal = <section className="scr on">{nav('pers')}<div className="ml-[210px]">
-    <div className="ml-[32px] mt-[40px] text-[34px] font-semibold leading-[44px] tracking-[-.4px]">Personal</div>
-    <div className="flex h-[55px] gap-5 border-b border-[#232325] pl-[32px]">{tabs.map(([name,key])=><div key={key} className={`tab ${subTab===key?'active':''}`} onClick={()=>setSubTab(key)}>{name}</div>)}</div>
-    <div className="max-w-[1040px] pb-[90px] pl-[32px] pt-[30px]">
-      {subTab === 'c' && <><div className="flex h-[38px] items-center justify-between"><div className="h2">Campaigns</div><button className="btn w-[107px]" onClick={()=>go('new')}>Create</button></div><div className="sub mt-[3px]">Campaigns you’ve created and funded.</div>
-        <div className="card mt-[25px] overflow-hidden">{[
-          [createdName, '20% of subscription revenue · 128 creators', live?'Live':'Setting up', '#e4d8ff', 'ti-aperture'],
-          ['Tidal','25% of subscription revenue · 74 creators','Live','#cfe8dc','ti-wave-sine'],['Pocket Ledger','15% of subscription revenue · 41 creators','Paused','#ffe1c8','ti-notebook']
-        ].map(([name,info,status,color,icon])=><div key={name} className="flex h-[83px] cursor-pointer items-center gap-4 border-t border-[#242427] px-5 first:border-t-0" onClick={()=>go('pers','i')}><span className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl text-[#17141f]" style={{background:color}}><Icon name={icon}/></span><div><div className="text-[20px] font-medium">{name}</div><div className="text-[17.5px] text-[#9a9a9f]">{info}</div></div><span className="pill light ml-auto">{status}</span></div>)}</div>
-      </>}
-      {subTab === 'r' && <><div className="h2">Creators</div><div className="sub mt-[3px]">Approve creators and see what they’ve earned you.</div><div className="mt-[30px] border-b border-[#26262a] pb-3 text-[17px] font-medium text-[#8d8d92]">Requests</div><div className="card mt-3 overflow-hidden">{[['Amira Hassan','Requested Palazzo Lens · 2h ago','#f4c4d8'],['Dawit Bekele','Requested Tidal · 5h ago','#b9d7ff']].map(([n,d,c])=><div className="flex h-[83px] items-center gap-4 border-t border-[#242427] px-5 first:border-0" key={n}><Avatar color={c} size={44}/><div><div className="text-[20px] font-medium">{n}</div><div className="text-[17.5px] text-[#9a9a9f]">{d}</div></div><div className="ml-auto flex gap-3"><button className="btn" onClick={e=>e.currentTarget.textContent='Declined'}>Decline</button><button className="btn white" onClick={e=>e.currentTarget.textContent='Approved'}>Approve</button></div></div>)}</div><div className="mt-8 border-b border-[#26262a] pb-3 text-[17px] font-medium text-[#8d8d92]">Approved</div><div className="card mt-3 overflow-hidden">{[['Selam Tesfaye','9 paying subscribers · $45.00 earned','#9be3c6'],['Yonas Girma','6 paying subscribers · $30.00 earned','#ffd9a8']].map(([n,d,c])=><div className="flex h-[83px] items-center gap-4 border-t border-[#242427] px-5 first:border-0" key={n}><Avatar color={c} size={44}/><div><div className="text-[20px] font-medium">{n}</div><div className="text-[17.5px] text-[#9a9a9f]">{d}</div></div><span className="pill light ml-auto">Active</span></div>)}</div></>}
-      {subTab === 'p' && <><div className="h2">Funding</div><div className="card mt-[23px] flex items-center gap-5 p-6"><div className="flex-1"><div className="text-[20px] font-semibold">{funded?'Wallet funded · $2,000.00':'Add funds to your wallet'}</div><div className="mt-1.5 text-[17.5px] leading-[26px] text-[#a6a6aa]">Creators are paid from this wallet. Funds are reserved as soon as an earning is created.</div></div><button className="btn white h-12 px-6 text-[20px]" onClick={()=>{setFunded(true);setToast('Wallet funded')}}>{funded?'Add more':'Add funds'}</button></div><div className="divider"/><div className="h2 mt-[39px]">Payment Methods</div><div className="sub mt-[6px]">Choose accepted payment methods for deposits.</div><div className="card mt-[25px] overflow-hidden">{[['Cards','Major credit and debit cards, Apple Pay and Google Pay are always accepted.'],['Bank debit','For large deposits. Settles over a few days.']].map(([n,d],i)=><div key={n} className="flex h-[86px] items-center justify-between border-t border-[#242427] px-5 first:border-0"><div><div className="text-[20px] font-medium">{n}</div><div className="text-[17.5px] text-[#9a9a9f]">{d}</div></div>{i===0?<span className="pill light">On</span>:<button className="tg" onClick={e=>e.currentTarget.classList.toggle('on')}/>}</div>)}</div><div className="mt-8 text-[17px] text-[#8d8d92]">Regional Payment Methods</div><div className="mt-4 grid grid-cols-3 gap-[11px]">{['Alipay','Bancontact','FPX','iDEAL','Konbini','PayNow','Pix','Przelewy24','Swish','TWINT','UPI','WeChat Pay','Zip'].map(n=><div className="flex h-14 items-center gap-2 rounded-[14px] border border-[#242427] px-4 text-[18px] font-medium" key={n}><span className="rounded bg-[#2a2a2d] px-1 text-[11px]">{n.slice(0,3).toUpperCase()}</span>{n}<button className="tg ml-auto scale-75" onClick={e=>e.currentTarget.classList.toggle('on')}/></div>)}</div></>}
-      {subTab === 'i' && <><div className="flex h-14 items-center gap-[14px]"><span className="flex h-[52px] w-[52px] items-center justify-center rounded-[13px] text-[28px] text-[#17141f]" style={{background:'#e4d8ff'}}><Icon name="ti-aperture"/></span><div className="text-[25px] font-semibold">{createdName}</div><span className={`pill ${live?'light':''}`}>{live?'Live':'Setting up'}</span></div><Stats items={live?[['Attributed revenue','$4,820.00','$612.00 last week','ti-chart-bar'],['Paying subscribers','214','31 last week','ti-users'],['Creator earnings','$819.40','20% share · $81.94 fee','ti-percentage'],['Wallet balance','$1,098.66','$196.60 reserved','ti-wallet']]:[['Attributed revenue','$0.00','—','ti-chart-bar'],['Paying subscribers','0','—','ti-users'],['Creator earnings','$0.00','20% share','ti-percentage'],['Wallet balance',funded?'$2,000.00':'$0.00',funded?'$0.00 reserved':'Not funded','ti-wallet']]}/><div className="info"><Icon name="ti-info-circle"/>Creators earn only from verified subscription payments, never from installs or clicks.</div><div className="divider"/><div className="mt-8 flex justify-between"><div className="h2">Performance</div><button className="btn">{query}<Icon name="ti-chevron-down"/></button></div><Chart empty={!live}/></>}
-      {subTab === 's' && <div className="flex gap-8"><div className="w-[240px] flex-none">{[['Defaults','d','ti-adjustments-horizontal'],['Developer','v','ti-code'],['Billing','b','ti-heart']].map(([n,k,ic])=><div key={k} className={`flex h-[45px] cursor-pointer items-center gap-[15px] text-[20px] ${settingsTab===k?'font-semibold text-white':'text-[#9a9a9f]'}`} onClick={()=>setSettingsTab(k)}><Icon name={ic}/>{n}</div>)}</div><div className="w-[745px]">{settingsTab==='d'?<><div className="h2">Campaign Defaults</div><div className="sub mt-1.5">Default settings for new campaigns.</div><div className="card mt-[25px] overflow-hidden">{[['Revenue share','Share of subscription revenue paid to creators.','20%'],['Paid renewals','Months of renewals that earn creators a share.','6 months'],['Auto-approve Creators','Approve creator requests without review.','toggle']].map(([n,d,v])=><div className="flex h-[86px] items-center justify-between border-t border-[#242427] px-5 first:border-0" key={n}><div><div className="text-[20px] font-medium">{n}</div><div className="text-[17.5px] text-[#9a9a9f]">{d}</div></div>{v==='toggle'?<button className="tg" onClick={e=>e.currentTarget.classList.toggle('on')}/>:<span className="btn w-[97px]">{v}</span>}</div>)}</div></>:settingsTab==='v'?<><div className="h2">Developer</div><div className="sub mt-1.5">App key, App Store connection and SDK.</div><div className="card mt-[25px] flex items-center gap-4 p-6"><Icon name="ti-code" className="text-4xl text-[#5d5d62]"/><div className="flex-1"><div className="text-xl">Developer console</div><div className="text-[17.5px] text-[#9a9a9f]">Connect App Store Connect and install the SDK.</div></div><button className="btn white h-[46px]" onClick={()=>go('dev','asc')}>Open</button></div></>:<div className="card p-6"><div className="text-[17px] text-[#a6a6aa]">Upgrade to</div><div className="text-[25px] font-medium text-[#c9b8ff]">umi Pro</div><div className="mt-1.5 text-[64px] font-medium">$69 <span className="text-[18px] text-[#a6a6aa]">Per month</span></div><button className="btn purple mt-5 h-12 w-full text-xl" onClick={()=>setToast('Upgrade options coming soon')}>Upgrade to umi Pro</button></div>}</div></div>}
-    </div>
-  </div></section>;
-
-  const campaignDetail = <section className="scr on"><div className="px-[100px] pb-[100px] pt-9"><button className="flex h-10 items-center gap-2 text-[18px] text-[#a6a6aa]" onClick={()=>go('disc')}><Icon name="ti-arrow-left"/>Back</button>
-    <div className="mt-[14px] flex gap-10"><div className="w-[413px] flex-none"><div className="flex h-[412px] items-center justify-center rounded-[22px] border border-[#2a2a2e] bg-[#e4d8ff] text-[170px] text-[#17141f]"><Icon name="ti-aperture"/></div><div className="mt-[41px] flex items-center gap-3"><Avatar color="#f4c4d8" size={40}/><div><div className="text-[15px] text-[#8d8d92]">Presented by</div><div className="text-[20px] font-medium">Maya Chen</div></div></div><div className="mt-4 text-[17.5px] leading-[26px] text-[#9a9a9f]">Photo editing tools for creators, built in Addis Ababa.</div><div className="mt-[34px] border-b border-[#26262a] pb-3 text-[17px] text-[#8d8d92]">Founder</div><div className="mt-3 flex h-[50px] items-center gap-3"><Avatar color="#f4c4d8" size={32}/><span className="text-[20px]">Maya Chen</span><span className="ml-auto flex gap-3 text-xl text-[#8d8d92]"><Icon name="ti-brand-instagram"/><Icon name="ti-brand-x"/></span></div></div>
-      <div className="w-[708px] flex-none"><div className="inline-flex h-[34px] items-center gap-2 rounded-[10px] border border-[#242427] px-2 text-[15.5px] text-[#8d8d92]"><Icon name="ti-apps" className="text-xl text-[#d8d8dc]"/>Featured in <span className="font-medium text-white">Photo and video</span></div><div className="mt-[18px] text-[55px] font-semibold leading-[70px] tracking-[-1px]">Palazzo Lens</div><div className="mt-5 flex items-center gap-4"><span className="flex h-[50px] w-[50px] items-center justify-center rounded-xl border border-[#2a2a2e] text-2xl"><Icon name="ti-percentage"/></span><div><div className="text-[20px] font-medium">20% of subscription revenue</div><div className="text-[18px] text-[#9a9a9f]">First payment plus 6 months of renewals</div></div></div><div className="mt-[23px] flex items-center gap-4"><span className="flex h-[50px] w-[50px] items-center justify-center rounded-xl border border-[#2a2a2e] text-2xl"><Icon name="ti-calendar"/></span><div><div className="text-[20px] font-medium">Oct 27 – Nov 27</div><div className="text-[18px] text-[#9a9a9f]">Ends in 31 days</div></div></div>
-        <div className="mt-[34px] overflow-hidden rounded-[20px] bg-[#c9b8ff] text-[#17141f]"><div className="flex h-[45px] items-center bg-[#b9a5f2] px-5 text-[18px] text-[#3a3158]">Join</div><div className="p-5"><div className="text-2xl font-semibold">{requested?'Request sent':'Request to join'}</div><div className="mt-1.5 text-[17.5px] leading-[26px] text-[#3a3158]">{requested?'Waiting for the founder to approve you. We’ll notify you when it’s done.':'The founder approves each creator. Once approved, you claim your own link, QR code and creator code and earn 20% of every subscription payment.'}</div><button className="btn black mt-[18px] h-12 w-full text-xl" onClick={()=>setRequested(v=>!v)}>{requested?'Requested':'Request to join'}</button>{requested&&<button className="mt-3 w-full text-[15px] font-semibold underline" onClick={()=>go('join')}>Preview as approved</button>}</div></div>
-        <div className="mt-11 border-b border-[#26262a] pb-3 text-[17px] text-[#8d8d92]">About Campaign</div><div className="mt-[22px] text-[20px] leading-[30px] text-[#e4e4e6]">{campaigns[0].desc}</div><div className="mt-9 border-b border-[#26262a] pb-3 text-[17px] text-[#8d8d92]">Get the app</div><div className="flex h-16 items-center gap-[14px] border-b border-[#1f1f22]"><span className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[#2a2a2e] text-[22px]"><Icon name="ti-brand-apple"/></span><span className="text-[20px] font-medium">App Store</span><Icon name="ti-arrow-up-right" className="ml-auto text-xl text-[#8d8d92]"/></div>
-      </div></div>
-  </div></section>;
-
-  const joinScreen = <section className="scr on"><div className="mx-auto w-[820px] pb-[90px] pt-9"><button className="flex h-10 items-center gap-2 text-[18px] text-[#a6a6aa]" onClick={()=>go('disc')}><Icon name="ti-arrow-left"/>Back to campaigns</button>
-    <div className="mt-5 flex h-[72px] items-center gap-[18px]"><span className="flex h-[72px] w-[72px] items-center justify-center rounded-[18px] bg-[#e4d8ff] text-[40px] text-[#17141f]"><Icon name="ti-aperture"/></span><div><div className="text-[34px] font-semibold leading-[42px] tracking-[-.5px]">Palazzo Lens</div><div className="text-[18px] leading-[26px] text-[#9a9a9f]">20% of subscription revenue · by Maya Chen</div></div><span className="pill light ml-auto">Approved</span></div>
-    <div className="mt-[46px]"><div className="h2">Your link and code</div><div className="sub mt-[3px]">Claim your personal link, QR code and creator code.</div></div>
-    {!claimed ? <button className="mt-6 flex h-[68px] w-full items-center justify-center rounded-[24px] border border-[#2e2e33] text-[19px] font-semibold hover:bg-[#111113]" onClick={()=>{setClaimed(true);setToast('Referral code claimed')}}>Claim code</button> :
-      <div className="mt-6 flex gap-8 rounded-[24px] border border-[#2e2e33] p-8"><div className="flex flex-1 flex-col"><div className="text-[27px] font-bold">Your referral link</div><div className="mt-2 text-[17px] text-[#a6a6aa]">Everyone who subscribes through your link or code earns you a share, every payment.</div>{[['umi.link/pl-maya27','Copy link'],['MAYA-MAYA27','Copy code']].map(([value,label],i)=><div className="mt-4 flex gap-[10px]" key={value}><div className="flex h-[50px] flex-1 items-center overflow-hidden rounded-xl border border-[#2a2a2e] px-4 text-[17px]">{value}</div><button className="flex h-[50px] min-w-[144px] items-center justify-center gap-2 rounded-xl bg-[#c9b8ff] px-5 font-semibold text-[#0a0a0a]" onClick={async()=>{try{await navigator.clipboard.writeText(i===0?'https://umi.link/pl-maya27':'MAYA-MAYA27')}catch{} setCopied(label);window.setTimeout(()=>setCopied(''),1400)}}><Icon name={copied===label?'ti-check':'ti-copy'}/>{copied===label?'Copied':label}</button></div>)}<div className="mt-auto flex pt-6">{[['20%','Revenue share'],['6 mo','Of renewals'],['30 days','Refund hold']].map(([v,n])=><div className="flex-1 border-l border-[#26262a] pl-[18px] first:border-0 first:pl-0" key={n}><b className="block text-[26px]">{v}</b><span className="text-[13.5px] text-[#7d7d82]">{n}</span></div>)}</div></div><div className="flex w-[240px] flex-none flex-col items-center rounded-[22px] border border-[#2e2e33] px-5 py-[22px] text-center"><div className="text-[14.5px] text-[#a6a6aa]">Scan with your phone</div><div className="mt-4 grid h-[174px] w-[174px] grid-cols-9 gap-[2px] rounded-[14px] bg-white p-3">{Array.from({length:81},(_,i)=><span key={i} className={`${(i*17+i%5*7)%4===0?'bg-[#0a0a0a]':''}`}/>)}</div><button className="btn mt-[14px] h-[42px]" onClick={()=>setToast('Download PNG') }><Icon name="ti-download"/>Download PNG</button><div className="mt-3 text-[12.5px] text-[#6f6f74]">Preview only</div></div></div>}
-    <div className="divider mt-[44px]"/><div className="mt-[38px] flex h-[38px] items-center justify-between"><div className="h2">Analytics</div><div className="flex gap-[6px]"><div className="relative"><button className="btn w-[190px] justify-between" onClick={()=>setMetricOpen(v=>!v)}>{query}<Icon name="ti-chevron-down"/></button>{metricOpen&&<div className="pop-menu">{['Earned','Link clicks','Referred users','Paying subscribers'].map(v=><button key={v} className={query===v?'selected':''} onClick={()=>{setQuery(v);setMetricOpen(false)}}>{v}</button>)}</div>}</div><button className="btn w-[140px]">Last 14 days<Icon name="ti-chevron-down"/></button></div></div><Stats items={claimed?[['Link clicks','214','31 last week'],['Referred users','63','9 last week'],['Paying subscribers','18','3 last week'],['Earned','$90.00','20% of revenue']]:[['Link clicks','0','—',''],['Referred users','0','—',''],['Paying subscribers','0','—',''],['Earned','$0.00','—','']]}/><Chart empty={!claimed} width={820} labels={['Oct 14','Oct 20','Oct 27']}/>
-    <div className="mt-[34px]"><div className="text-[20px] font-semibold">How people found you</div>{[['ti-link','Link or QR code',claimed?'47 people · 75%':'0 people',claimed?'75%':'0%'],['ti-keyboard','Creator code typed in the app',claimed?'16 people · 25%':'0 people',claimed?'25%':'0%']].map(([ic,n,value,p])=><div className="flex h-[62px] items-center gap-[14px] border-t border-[#1f1f22]" key={n}><Icon name={ic} className="text-[22px] text-[#bdbdc1]"/><div className="flex-1"><div className="flex justify-between text-[18px]"><span>{n}</span><span className="text-[#a6a6aa]">{value}</span></div><div className="mt-2 h-[6px] rounded bg-[#1d1d20]"><div className="h-full rounded bg-[#c9b8ff]" style={{width:p}}/></div></div></div>)}</div>
-  </div></section>;
-
-  const newCampaign = <section className="scr on"><div className="px-[100px] pb-[100px] pt-9"><button className="flex h-10 items-center gap-2 text-[18px] text-[#a6a6aa]" onClick={()=>go('disc')}><Icon name="ti-arrow-left"/>Cancel</button><div className="mt-[14px] flex gap-10">
-    <div className="flex h-[413px] w-[412px] flex-none items-center justify-center rounded-[22px] border border-[#2a2a2e] bg-[#141416] text-[64px] text-[#5d5d62]"><Icon name="ti-photo"/></div>
-    <div className="relative w-[708px] flex-none"><input value={campaignName} onChange={e=>setCampaignName(e.target.value)} placeholder="Campaign Name" className="h-16 w-full border-0 bg-transparent p-0 text-[48px] font-semibold text-white outline-none placeholder:text-white" style={{fontFamily:'"Roboto Slab", Georgia, serif'}} />
-      <div className="mt-[30px] flex gap-4"><div className="flex h-[110px] w-[517px] items-center gap-[14px] rounded-[14px] border border-[#242427] px-3 pl-5"><div className="flex flex-col gap-[30px] text-[20px]"><span>Start</span><span>End</span></div><div className="ml-auto flex flex-col gap-[10px]"><div className="flex gap-[10px]"><button className="btn h-11 w-[158px] text-[19px]" onClick={e=>e.currentTarget.textContent=e.currentTarget.textContent==='Tue, Oct 27'?'Wed, Oct 28':'Tue, Oct 27'}>Tue, Oct 27</button><button className="btn h-11 w-[123px] text-[19px]" onClick={e=>e.currentTarget.textContent=e.currentTarget.textContent==='10:30 AM'?'11:00 AM':'10:30 AM'}>10:30 AM</button></div><div className="flex gap-[10px]"><button className="btn h-11 w-[158px] text-[19px]" onClick={e=>e.currentTarget.textContent=e.currentTarget.textContent==='Tue, Oct 27'?'Wed, Oct 28':'Tue, Oct 27'}>Tue, Oct 27</button><button className="btn h-11 w-[123px] text-[19px]" onClick={e=>e.currentTarget.textContent=e.currentTarget.textContent==='11:30 AM'?'12:00 PM':'11:30 AM'}>11:30 AM</button></div></div></div><div className="h-[110px] w-[175px] rounded-[14px] border border-[#242427] p-[16px_18px]"><Icon name="ti-world" className="text-xl text-[#bdbdc1]"/><div className="mt-1 text-[18px] font-medium">GMT+03:00</div><div className="text-[17px] text-[#9a9a9f]">Addis Ababa</div></div></div>
-      <button className="mt-[21px] flex h-[73px] w-full items-center gap-3 rounded-[14px] border border-[#242427] px-[18px] text-left"><Icon name="ti-link" className="text-[22px] text-[#bdbdc1]"/><span><b className="block text-[20px] font-medium">Add App Link</b><span className="text-[17.5px] text-[#9a9a9f]">App Store link</span></span></button>
-      <button className="mt-5 flex h-[47px] w-full items-center gap-3 rounded-[14px] border border-[#242427] px-[18px] text-[20px] font-medium"><Icon name="ti-align-left" className="text-xl text-[#bdbdc1]"/>Add Description</button>
-      <div className="mt-[33px] text-[17px] font-medium text-[#9a9a9f]">Campaign Options</div><div className="mt-3 overflow-hidden rounded-[14px] border border-[#242427]">{[['ti-percentage','Revenue share','20%'],['ti-repeat','Paid renewals','6 months'],['ti-lock','Require Approval','toggle']].map(([ic,label,value])=><div className="flex h-[50px] items-center gap-3 border-t border-[#242427] px-[18px] text-[20px] font-medium first:border-0" key={label}><Icon name={ic} className="text-[22px] text-[#bdbdc1]"/>{label}{value==='toggle'?<button className="tg on ml-auto" onClick={e=>e.currentTarget.classList.toggle('on')}/>:<span className="ml-auto text-[#a6a6aa]">{value}</span>}</div>)}</div>
-      <button className="btn white mt-[50px] h-[54px] w-full rounded-xl text-[22px]" onClick={()=>{const n=campaignName.trim()||'Untitled campaign';setCreatedName(n);setFunded(false);setAppleConnected(false);setSdkConnected(false);go('pers','i');setToast('Campaign created. Finish setup to go live.')}} data-testid="button-create-campaign">Create Campaign</button>
-    </div></div></div></section>;
-
-  const withdraw = <section className="scr on"><div className="px-[100px] pb-[100px] pt-9"><button className="flex h-10 items-center gap-2 text-[18px] text-[#a6a6aa]" onClick={()=>go('earn')}><Icon name="ti-arrow-left"/>Back to earnings</button>
-    {!withdrawDone ? <div className="mt-[14px] flex gap-10"><div className="w-[412px] flex-none"><div className="text-[34px] font-semibold leading-[44px]">Withdraw</div><div className="mt-1.5 text-[20px] text-[#dcdcde]">Send your earnings to your card.</div><div className="mt-[34px] text-[17px] text-[#9a9a9f]">Amount</div><div className="mt-2 flex h-24 items-center gap-[6px] rounded-2xl border border-[#242427] px-5"><span className="text-[50px] font-medium text-[#8d8d92]">$</span><input value={amount} onChange={e=>{setAmount(e.target.value);setWithdrawError('')}} className="h-16 min-w-0 flex-1 bg-transparent text-[50px] font-medium outline-none" aria-label="Withdrawal amount" /><button className="btn h-[34px]" onClick={()=>setAmount(balance.toFixed(2))}>Max</button></div>{withdrawError&&<div className="mt-2 text-[15px] text-[#fca5a5]">{withdrawError}</div>}<div className="mt-2 text-[15px] text-[#8d8d92]">Available {fmt(balance)} · Minimum $10.00</div><div className="mt-[22px]">{[['Fee','$0.00'],['Arrives','2 to 3 business days'],['You’ll receive',fmt(Math.max(0,Number(amount)||0))]].map(([k,v])=><div key={k} className="flex h-[54px] items-center justify-between border-t border-[#1f1f22] text-[18px]"><span className="text-[#9a9a9f]">{k}</span><span className={k==='You’ll receive'?'text-[20px] font-semibold':''}>{v}</span></div>)}</div></div>
-      <div className="w-[708px] flex-none"><div className="h2">Pay out to</div><div className="sub mt-[3px]">Choose a card or add a new one.</div><div className="card mt-[25px] overflow-hidden">{cards.map(c=><div className="flex h-[83px] cursor-pointer items-center gap-4 border-t border-[#242427] px-[22px] first:border-0" key={c.id} onClick={()=>setSelectedCard(c.id)}><span className="flex h-9 w-[54px] items-center justify-center rounded-[7px] bg-[#26262a] text-[13px] font-bold">{c.brand}</span><div><div className="text-[20px] leading-7">{c.label}</div><div className="text-[17.5px] text-[#9a9a9f]">Expires {c.expires}</div></div><span className={`ml-auto flex h-[26px] w-[26px] items-center justify-center rounded-full border-2 ${selectedCard===c.id?'border-[#c9b8ff]':''}`}>{selectedCard===c.id&&<span className="h-3 w-3 rounded-full bg-[#c9b8ff]"/>}</span></div>)}
-        <button className="flex h-[68px] w-full items-center gap-3 border-t border-[#242427] px-[22px] text-[20px] font-medium" onClick={()=>{setAddingCard(v=>!v);setCardError('')}}><Icon name="ti-plus" className="text-[22px]"/>Add a card</button>
-        {addingCard&&<div className="border-t border-[#242427] p-[20px_22px_22px]"><label className="small-label mt-0 block">Name on card</label><input className="input-dark" placeholder="Full name" value={cardName} onChange={e=>setCardName(e.target.value)}/><label className="small-label block">Card number</label><input className="input-dark" placeholder="1234 5678 9012 3456" value={cardNumber} onChange={e=>setCardNumber(e.target.value.replace(/\D/g,'').slice(0,16).replace(/(\d{4})(?=\d)/g,'$1 '))}/><div className="flex gap-[14px]"><div className="flex-1"><label className="small-label block">Expiry</label><input className="input-dark" placeholder="MM/YY" value={expiry} onChange={e=>{const v=e.target.value.replace(/\D/g,'').slice(0,4);setExpiry(v.length>2?`${v.slice(0,2)}/${v.slice(2)}`:v)}}/></div><div className="flex-1"><label className="small-label block">CVC</label><input className="input-dark" placeholder="123" value={cvc} onChange={e=>setCvc(e.target.value.replace(/\D/g,'').slice(0,4))}/></div></div>{cardError&&<div className="mt-2 text-[15px] text-[#fca5a5]">{cardError}</div>}<div className="mt-[14px] text-[14.5px] text-[#7d7d82]">Card details go straight to Stripe. umi never stores them.</div><div className="mt-4 flex justify-end gap-[10px]"><button className="btn h-11" onClick={()=>setAddingCard(false)}>Cancel</button><button className="btn white h-11" onClick={()=>{const digits=cardNumber.replace(/\D/g,'');const [m,y]=expiry.split('/').map(Number);let error='';if(!cardName.trim())error='Enter the name on the card.';else if(digits.length<15)error='Enter a valid card number.';else if(!(m>=1&&m<=12)||!y)error='Enter an expiry date as MM/YY.';else if(cvc.length<3)error='Enter the security code.';if(error){setCardError(error);return}const id=Date.now();const brand=digits.startsWith('4')?'VISA':digits.startsWith('5')?'MC':'CARD';setCards(old=>[...old,{id,brand,label:`${brand==='MC'?'Mastercard':brand==='VISA'?'Visa':'Card'} ••••${digits.slice(-4)}`,expires:expiry}]);setSelectedCard(id);setAddingCard(false);setCardNumber('');setCardName('');setExpiry('');setCvc('')}}>Save card</button></div></div>}
-      </div><button className="btn white mt-6 h-[54px] w-full rounded-xl text-[22px]" onClick={()=>{const n=Number(amount);let err='';if(!Number.isFinite(n)||!amount.trim())err='Enter an amount.';else if(n<10)err='The minimum withdrawal is $10.00.';else if(n>balance)err=`That’s more than your available balance of ${fmt(balance)}.`;else if(!cards.some(c=>c.id===selectedCard))err='Add a card to withdraw to.';if(err){setWithdrawError(err);return}setBalance(Math.round((balance-n)*100)/100);setWithdrawDone(true)}}>Withdraw</button></div>
-    </div> : <div className="mx-auto mt-[90px] w-[520px] text-center"><div className="inline-flex h-[76px] w-[76px] items-center justify-center rounded-full bg-[rgba(201,184,255,.16)] text-[38px] text-[#c9b8ff]"><Icon name="ti-check"/></div><div className="mt-5 text-[34px] font-semibold">Withdrawal requested</div><div className="mt-2 text-[19px] leading-7 text-[#a6a6aa]">We’ll send your withdrawal to your selected card. You’ll get a receipt by email.</div><button className="btn white mt-7 h-12 w-full text-xl" onClick={()=>go('earn')}>Back to earnings</button></div>}
-  </div></section>;
-
-  const developer = <section className="scr on"><div className="flex h-14 items-center gap-3 border-b border-[#1f1f22] px-5"><BrandMark size={26}/><span className="text-xl text-[#4a4a4f]">/</span><span className="text-[19px] font-semibold">Developer</span></div>
-    <aside className="absolute bottom-0 left-0 top-14 w-[280px] border-r border-[#1f1f22] px-[14px]"><button className="mb-[22px] flex h-[60px] w-[280px] items-center gap-2 border-b border-[#1f1f22] px-5 text-[18px] text-[#a6a6aa]" onClick={()=>go('pers','i')}><Icon name="ti-arrow-left"/>Back to Personal</button><div className="mb-2 px-[6px] font-mono text-[14px] tracking-[.1em] text-[#7d7d82]">DEVELOPER</div>{[['API Keys','asc'],['SDK Setup','sdk']].map(([n,k])=><div key={k} className={`flex h-[38px] cursor-pointer items-center rounded-[9px] px-2 text-[18px] ${devTab===k?'bg-[#1b1b1d] text-white':'text-[#a6a6aa]'}`} onClick={()=>setDevTab(k)}>{n}</div>)}</aside>
-    <main className="ml-[332px] w-[860px] pb-[100px] pt-[50px]">
-      {devTab==='asc'?<><div className="text-[34px] font-medium leading-[42px] tracking-[-.5px]">API Keys</div><div className="sub mt-[6px]">Connect your app so umi can verify subscription purchases with Apple.</div><div className="mt-[34px] text-[21px] font-semibold">Umi app key</div><div className="mt-[6px] text-[17px] text-[#a6a6aa]">Public. Safe to put in your app.</div><div className="mt-4 flex gap-[10px]"><div className="flex h-[50px] flex-1 items-center overflow-hidden rounded-xl border border-[#2a2a2e] px-4 font-mono text-[17px]">umi_app_pl_8f2kQ4mT9x</div><button className="btn h-[50px] px-5" onClick={async()=>{try{await navigator.clipboard.writeText('umi_app_pl_8f2kQ4mT9x')}catch{}setCopied('appkey');window.setTimeout(()=>setCopied(''),1400)}}><Icon name={copied==='appkey'?'ti-check':'ti-copy'}/>{copied==='appkey'?'Copied':'Copy'}</button></div><div className="divider"/><div className="mt-[34px] flex items-center justify-between"><div className="h2 text-[21px]">App Store Connect key</div><span className={`pill ${appleConnected?'light':''}`}>{appleConnected?'Connected':'Not connected'}</span></div><div className="mt-[6px] text-[17px] leading-[25px] text-[#a6a6aa]">Create an In-App Purchase key in App Store Connect and enter its details. umi encrypts the private key and never shows it again.</div>
-        {!appleConnected ? <><label className="small-label block">Bundle ID</label><input className="input-dark" placeholder="com.example.palazzolens" value={bundleId} onChange={e=>setBundleId(e.target.value)}/><div className="flex gap-[14px]"><div className="flex-1"><label className="small-label block">Issuer ID</label><input className="input-dark" placeholder="69a6de70-…" value={issuerId} onChange={e=>setIssuerId(e.target.value)}/></div><div className="flex-1"><label className="small-label block">Key ID</label><input className="input-dark" placeholder="2X9R4HXF34" value={keyId} onChange={e=>setKeyId(e.target.value)}/></div></div><label className="small-label block">Private key</label><button className="flex h-[60px] w-full items-center rounded-xl border border-dashed border-[#2a2a2e] px-4 text-[17px] text-[#9a9a9f]" onClick={()=>setKeyFile(true)}><Icon name={keyFile?'ti-file':'ti-upload'} className="mr-[10px] text-xl text-[#c9b8ff]"/>{keyFile?'AuthKey_2X9R4HXF34.p8':'Upload the .p8 file'}</button>{devError&&<div className="mt-2 text-[15px] text-[#fca5a5]">{devError}</div>}<button className="btn purple mt-5 h-[50px] px-6 text-[18px]" onClick={()=>{if(!bundleId.trim()||!issuerId.trim()||!keyId.trim()){setDevError('Fill in the bundle ID, issuer ID and key ID.');return}if(!keyFile){setDevError('Upload the .p8 private key.');return}setAppleConnected(true);setDevError('');setToast('App Store connected')}}>Connect App Store</button></>:
-        <div className="mt-5 flex h-[72px] items-center gap-[14px] rounded-[14px] border border-[#242427] px-5"><Icon name="ti-circle-check" className="text-[26px] text-[#c9b8ff]"/><div><div className="text-[19px] font-medium">Key {keyId||'2X9R4HXF34'} connected</div><div className="text-[16px] text-[#8d8d92]">Private key encrypted. It won’t be shown again.</div></div></div>}
-      </>:<><div className="flex items-start justify-between"><div><div className="text-[34px] font-medium leading-[42px] tracking-[-.5px]">SDK Setup</div><div className="sub mt-[6px]">iOS for now. Add the SDK so referrals and purchases are verified.</div></div><span className={`pill mt-2 ${sdkConnected?'light':''}`}>{sdkConnected?'Connected':'Not connected'}</span></div>
-        {[
-          ['Install the SDK',<><span className="text-[#6f6f74]">// Swift Package Manager (placeholder URL)</span><br/><span className="text-[#9be3c6]">https://github.com/umi/umi-ios</span></>],
-          ['Configure it at launch',<><span className="text-[#c9b8ff]">Umi</span>.configure(appKey: <span className="text-[#9be3c6]">"umi_app_pl_8f2kQ4mT9x"</span>)</>],
-          ['Resolve the referral',<><span className="text-[#c9b8ff]">Umi</span>.resolveReferral()<br/><span className="text-[#6f6f74]">// If nothing arrives, let people type a creator code:</span><br/><span className="text-[#c9b8ff]">Umi</span>.claimCreatorCode(code)</>],
-          ['Bind and report purchases',<><span className="text-[#c9b8ff]">Umi</span>.bind(appAccountToken: token)<br/><span className="text-[#6f6f74]">// after a purchase</span><br/><span className="text-[#c9b8ff]">Umi</span>.reportTransaction(transaction.id)</>]
-        ].map(([title,code],i)=><div className="mt-[34px] flex gap-4" key={String(title)}><span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-md border border-[#2e2e32] text-[14px] text-[#bdbdc1]">{i+1}</span><div className="min-w-0 flex-1"><div className="text-[21px] font-semibold">{title}</div><pre className="mt-[14px] whitespace-pre-wrap break-all rounded-xl border border-[#232326] p-[18px] font-mono text-[15.5px] leading-[25px] text-[#d8d8dc]">{code}</pre></div></div>)}
-        <div className="mt-[34px] flex gap-4"><span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-md border border-[#2e2e32]">5</span><div><div className="text-[21px] font-semibold">Verify the connection</div><div className="mt-1 text-[18px] text-[#a6a6aa]">Run your app, then send a test event from here.</div><div className="mt-[14px] flex items-center gap-[14px]"><button className="btn white h-11 px-5 text-[18px]" onClick={()=>{setEventSent(true);setSdkConnected(true);setToast('Connected · test event received')}}>Send test event</button><span className="text-[17px] text-[#c9b8ff]">{eventSent?'Connected · test event received':''}</span></div></div></div>
-      </>}
-    </main>
-  </section>;
-
-  const notifications = (
-    <>
-      <div className="overlay" onClick={() => setNotificationOpen(false)} />
-      <div className="notification-panel fixed bottom-0 left-[56px] top-0 z-50 w-[420px] overflow-y-auto border-r border-[#1a1a1c] bg-[#0a0a0a] px-4 pb-12 shadow-2xl">
-        <div className="flex h-[54px] items-center justify-between pt-2 border-b border-[#18181b]">
-          <div className="text-[20px] font-bold text-white">Notifications</div>
-          <button
-            type="button"
-            onClick={() => setNotificationOpen(false)}
-            className="text-[#8d8d92] hover:text-white transition-colors cursor-pointer text-[18px]"
-          >
-            <Icon name="ti-x" />
-          </button>
-        </div>
-
-        {/* 1. Meta Global AI Developer Hackathon */}
-        <div className="mt-4 flex gap-3">
-          <img src="/assets/meta-hackathon-badge.png?v=2" alt="Meta Global AI Developer Hackathon" className="h-9 w-9 flex-none rounded-full object-cover" />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14.5px] font-semibold leading-5 text-white">
-              Meta Global AI Developer Hackathon <span className="ml-1 text-[13px] font-normal text-[#8d8d92]">4d</span>
-            </div>
-            <div className="mt-0.5 text-[14.5px] font-medium leading-5 text-white">
-              You're approved for this event
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Cerebral Valley - Jul 7 */}
-        <div className="mt-6 flex gap-3">
-          <img src="/assets/cerebral-valley-badge.png?v=2" alt="Cerebral Valley" className="h-9 w-9 flex-none rounded-full object-cover" />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14.5px] font-semibold leading-5 text-white">
-              Cerebral Valley <span className="ml-1 text-[13px] font-normal text-[#8d8d92]">Jul 7</span>
-            </div>
-            <div className="mt-0.5 text-[14px] leading-5 text-white">
-              sent an announcement for <b className="font-semibold text-white">Built with Claude: Life Sciences...</b>
-            </div>
-            <div className="mt-2 rounded-xl border border-[#27272a] bg-[#121214] p-3 text-[13.5px] leading-[19px] text-[#d4d4d8]">
-              Thank you for applying to Built with Claude: Life Sciences in partnership with <b className="text-white font-semibold">Gladstone Institutes</b>. We received an incredible number of applicatio...
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Cerebral Valley - Apr 23 */}
-        <div className="mt-6 flex gap-3">
-          <img src="/assets/cerebral-valley-badge.png?v=2" alt="Cerebral Valley" className="h-9 w-9 flex-none rounded-full object-cover" />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14.5px] font-semibold leading-5 text-white">
-              Cerebral Valley <span className="ml-1 text-[13px] font-normal text-[#8d8d92]">Apr 23</span>
-            </div>
-            <div className="mt-0.5 text-[14px] leading-5 text-white">
-              sent an announcement for <b className="font-semibold text-white">Built with Opus 4.7: a Claude Code hackathon.</b>
-            </div>
-            <div className="mt-2 rounded-xl border border-[#27272a] bg-[#121214] p-3 text-[13.5px] leading-[19px] text-[#d4d4d8]">
-              Thank you for applying to the Built with Opus 4.7: a Claude Code hackathon. After reviewing all subm...
-            </div>
-          </div>
-        </div>
-
-        {/* 4. Cerebral Valley - Apr 21 */}
-        <div className="mt-6 flex gap-3">
-          <img src="/assets/cerebral-valley-badge.png?v=2" alt="Cerebral Valley" className="h-9 w-9 flex-none rounded-full object-cover" />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14.5px] font-semibold leading-5 text-white">
-              Cerebral Valley <span className="ml-1 text-[13px] font-normal text-[#8d8d92]">Apr 21</span>
-            </div>
-            <div className="mt-0.5 text-[14px] leading-5 text-white">
-              sent an announcement for <b className="font-semibold text-white">Built with Opus 4.7: a Claude Code hackathon.</b>
-            </div>
-            <div className="mt-2 rounded-xl border border-[#27272a] bg-[#121214] p-3 text-[13.5px] leading-[19px] text-[#d4d4d8]">
-              Thank you for applying to the Built with Opus 4.7: a Claude Code hackathon. We received an incredibl...
-            </div>
-          </div>
-        </div>
-
-        {/* 5. Cerebral Valley - Apr 20 */}
-        <div className="mt-6 flex gap-3">
-          <img src="/assets/cerebral-valley-badge.png?v=2" alt="Cerebral Valley" className="h-9 w-9 flex-none rounded-full object-cover" />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14.5px] font-semibold leading-5 text-white">
-              Cerebral Valley <span className="ml-1 text-[13px] font-normal text-[#8d8d92]">Apr 20</span>
-            </div>
-            <div className="mt-0.5 text-[14px] leading-5 text-white">
-              sent an announcement for <b className="font-semibold text-white">Built with Opus 4.7: a Claude Code hackathon.</b>
-            </div>
-            <div className="mt-2 rounded-xl border border-[#27272a] bg-[#121214] p-3 text-[13.5px] leading-[19px] text-[#d4d4d8]">
-              Thank you for applying to Built with Opus 4.7: a Claude Code hackathon! We received an incredible nu...
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-
-  const moreMenu = (
-    <>
-      <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-      <div className="fixed bottom-14 left-3 z-50 w-[190px] rounded-2xl border border-[#26262a] bg-[#111113] py-2 shadow-2xl">
-        <button className="flex h-[41px] w-full items-center px-4 text-left text-[16px] font-medium hover:bg-[#1a1a1c]" onClick={() => go('disc')}>Campaigns</button>
-        <button className="flex h-[41px] w-full items-center px-4 text-left text-[16px] font-medium hover:bg-[#1a1a1c]" onClick={() => go('earn')}>Earnings</button>
-        <button className="flex h-[41px] w-full items-center px-4 text-left text-[16px] font-medium hover:bg-[#1a1a1c]" onClick={() => go('pers','c')}>Personal</button>
-        <button className="flex h-[41px] w-full items-center px-4 text-left text-[16px] font-medium hover:bg-[#1a1a1c]" onClick={() => go('dev','asc')}>Developer</button>
-        <button className="flex h-[41px] w-full items-center px-4 text-left text-[16px] font-medium hover:bg-[#1a1a1c]" onClick={() => { setMoreOpen(false); setSettingsOpen(true); }}>Settings</button>
-        {['About','Privacy Policy','Terms of Service'].map(label => <button key={label} className="flex h-[41px] w-full items-center px-4 text-left text-[16px] font-medium hover:bg-[#1a1a1c]" onClick={() => { setMoreOpen(false); setToast(label); }}>{label}</button>)}
-        <div className="my-1 border-t border-[#26262a]"/>
-        <button className="flex h-[41px] w-full items-center px-4 text-left text-[16px] font-medium text-[#fca5a5] hover:bg-[#1a1a1c]" onClick={() => { setMoreOpen(false); setToast('Signed out'); }}>Log Out</button>
-      </div>
-    </>
-  );
-
-  const settingsModal = (
-    <>
-      <div className="overlay" onClick={() => setSettingsOpen(false)} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setSettingsOpen(false)}>
-        <div className="relative w-full max-w-[580px] max-h-[90vh] overflow-y-auto rounded-2xl border border-[#242428] bg-[#0c0c0e] p-6 shadow-2xl my-auto" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between pb-2 border-b border-[#1c1c20]">
-            <h2 className="text-[20px] font-bold text-white">Settings</h2>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(false)}
-              className="text-[#8d8d92] hover:text-white transition-colors cursor-pointer"
-              aria-label="Close settings"
-            >
-              <Icon name="ti-x" className="text-[20px]" />
-            </button>
-          </div>
-
-          <div className="mt-4">
-            <h3 className="text-[17px] font-bold text-white">Notifications</h3>
-
-            <div className="mt-4 space-y-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[15px] font-semibold text-white">Email Notifications</div>
-                  <div className="text-[13.5px] text-[#8d8d92]">Receive updates by email.</div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={emailNotif}
-                  onClick={() => setEmailNotif(v => !v)}
-                  className={`relative inline-flex h-6 w-11 flex-none items-center rounded-full transition-colors duration-200 cursor-pointer ${emailNotif ? 'bg-[#c9b8ff]' : 'bg-[#2c2c30]'}`}
-                >
-                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-200 ${emailNotif ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[15px] font-semibold text-white">Event Invitations</div>
-                  <div className="text-[13.5px] text-[#8d8d92]">Emails inviting you to events you haven't joined.</div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={eventNotif}
-                  onClick={() => setEventNotif(v => !v)}
-                  className={`relative inline-flex h-6 w-11 flex-none items-center rounded-full transition-colors duration-200 cursor-pointer ${eventNotif ? 'bg-[#c9b8ff]' : 'bg-[#2c2c30]'}`}
-                >
-                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-200 ${eventNotif ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[15px] font-semibold text-white">SMS Notifications</div>
-                  <div className="text-[13.5px] text-[#8d8d92]">Verify your phone number to receive text messages.</div>
-                </div>
-                <button
-                  type="button"
-                  className="rounded-xl border border-[#2b2b30] bg-[#161618] px-3.5 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-[#202024] cursor-pointer whitespace-nowrap flex-none"
-                  onClick={() => setToast('Verification SMS sent')}
-                >
-                  Verify Phone Number
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[15px] font-semibold text-white">Chat Goal Alerts</div>
-                  <div className="text-[13.5px] text-[#8d8d92]">Get notified when your bot completes its chat goal.</div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={chatGoalAlerts}
-                  onClick={() => setChatGoalAlerts(v => !v)}
-                  className={`relative inline-flex h-6 w-11 flex-none items-center rounded-full transition-colors duration-200 cursor-pointer ${chatGoalAlerts ? 'bg-[#c9b8ff]' : 'bg-[#2c2c30]'}`}
-                >
-                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-200 ${chatGoalAlerts ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <h3 className="text-[17px] font-bold text-white">Account</h3>
-
-            <div className="mt-4 space-y-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[15px] font-semibold text-white">Organization Account</div>
-                  <div className="text-[13.5px] text-[#8d8d92]">Switch to an organization account to add and manage members.</div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={orgAccount}
-                  onClick={() => setOrgAccount(v => !v)}
-                  className={`relative inline-flex h-6 w-11 flex-none items-center rounded-full transition-colors duration-200 cursor-pointer ${orgAccount ? 'bg-[#c9b8ff]' : 'bg-[#2c2c30]'}`}
-                >
-                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform duration-200 ${orgAccount ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[15px] font-semibold text-white">Log Out</div>
-                  <div className="text-[13.5px] text-[#8d8d92]">Log out on this device.</div>
-                </div>
-                <button
-                  type="button"
-                  className="rounded-xl border border-[#2b2b30] bg-[#161618] px-4 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-[#202024] cursor-pointer whitespace-nowrap flex-none"
-                  onClick={() => setToast('Logged out')}
-                >
-                  Log Out
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[15px] font-semibold text-white">Delete Account</div>
-                  <div className="text-[13.5px] text-[#8d8d92]">Permanently delete your account and profile. This cannot be undone.</div>
-                </div>
-                <button
-                  type="button"
-                  className="rounded-xl bg-[#2f1c20] hover:bg-[#3d2429] border border-[#5a2c33]/40 px-4 py-1.5 text-[13px] font-medium text-[#fca5a5] transition-colors cursor-pointer whitespace-nowrap flex-none"
-                  onClick={() => setToast('Account deletion requested')}
-                >
-                  Delete Account
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-
-  const current = screen === 'disc' ? discovery : screen === 'earn' ? earnings : screen === 'prof' ? profile : screen === 'pers' ? personal : screen === 'camp' ? campaignDetail : screen === 'join' ? joinScreen : screen === 'new' ? newCampaign : screen === 'wd' ? withdraw : developer;
-  const isScaled = scale < 1;
+  const activePt = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : null;
 
   return (
-    <div ref={stageRef} className="umi-stage">
-      <div
-        ref={appRef}
-        className="umi-app"
-        style={isScaled ? { transform: `scale(${scale})`, transformOrigin: 'top left', width: 1100 } : undefined}
-      >
-        {current}
+    <>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <div className="dd">
+          <div
+            className="btn sm"
+            style={{ minWidth: 160, justifyContent: 'space-between' }}
+            onClick={e => {
+              e.stopPropagation();
+              setMenuOpen(!menuOpen);
+            }}
+          >
+            <span>{def.n}</span>
+            <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
+          </div>
+          <div className={`dm ${menuOpen ? 'on' : ''}`}>
+            {order.map(k => (
+              <div
+                key={k}
+                className={k === currentKey ? 'on' : ''}
+                onClick={e => {
+                  e.stopPropagation();
+                  onSelectKey(k);
+                  setMenuOpen(false);
+                }}
+              >
+                {defs[k].n}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="btn sm" style={{ minWidth: 110 }}>
+          {vw === 820 ? 'Last 14 days' : 'Last 28 days'}
+          <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
+        </div>
       </div>
-      {moreOpen && moreMenu}
-      {notificationOpen && notifications}
-      {settingsOpen && settingsModal}
-      {toast && <div className="toast">{toast}</div>}
-    </div>
+
+      <div className="gr" style={{ marginTop: 20 }}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${vw} ${vh}`}
+          style={{ width: '100%', display: 'block', cursor: 'crosshair' }}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        >
+          {empty ? (
+            <>
+              {[0, 1, 2].map(g => {
+                const y = Y0 + (g * H) / 2;
+                return <line key={g} x1={X0} x2={X0 + W} y1={y} y2={y} stroke="#1d1d20" />;
+              })}
+              <text
+                x={vw / 2}
+                y={Y0 + H / 2 - 4}
+                fill="#a6a6aa"
+                fontSize="17"
+                fontWeight="500"
+                textAnchor="middle"
+                fontFamily="Inter,sans-serif"
+              >
+                No data yet
+              </text>
+              <text
+                x={vw / 2}
+                y={Y0 + H / 2 + 20}
+                fill="#6f6f74"
+                fontSize="14"
+                textAnchor="middle"
+                fontFamily="Inter,sans-serif"
+              >
+                {em || 'Waiting for the first subscription.'}
+              </text>
+            </>
+          ) : (
+            <>
+              {[0, 1, 2].map(g => {
+                const y = Y0 + (g * H) / 2;
+                return (
+                  <g key={g}>
+                    <line x1={X0} x2={X0 + W} y1={y} y2={y} stroke="#1d1d20" />
+                    <text
+                      x={vw - 44}
+                      y={y + 5}
+                      fill="#7d7d82"
+                      fontSize="14"
+                      fontFamily="Inter,sans-serif"
+                    >
+                      {formatVal(mx * (1 - g / 2), def.p)}
+                    </text>
+                  </g>
+                );
+              })}
+              {dts.map((t, i) => (
+                <text
+                  key={t}
+                  x={X0 + (i * W) / (dts.length - 1)}
+                  y={vh - 20}
+                  fill="#7d7d82"
+                  fontSize="14"
+                  fontFamily="Inter,sans-serif"
+                  textAnchor={i === 0 ? 'start' : i === dts.length - 1 ? 'end' : 'middle'}
+                >
+                  {t}
+                </text>
+              ))}
+              <path d={pathD} fill="none" stroke="#C9B8FF" strokeWidth="2.5" />
+              {activePt && (
+                <>
+                  <line
+                    y1={Y0}
+                    y2={Y0 + H}
+                    x1={activePt[0]}
+                    x2={activePt[0]}
+                    stroke="#3a3a3e"
+                  />
+                  <circle
+                    cx={activePt[0]}
+                    cy={activePt[1]}
+                    r="5"
+                    fill="#C9B8FF"
+                    stroke="#0a0a0a"
+                    strokeWidth="2"
+                  />
+                </>
+              )}
+            </>
+          )}
+        </svg>
+
+        {activePt && hoverIndex !== null && !empty && (
+          <div
+            className="tip"
+            style={{
+              display: 'block',
+              left: `${(activePt[0] / vw) * 100}%`,
+              top: `${(activePt[1] / vh) * 100}%`,
+              transform: 'translate(10px, -20px)',
+            }}
+          >
+            <span style={{ color: '#9a9a9f' }}>Day {hoverIndex + 1}</span>
+            <br />
+            {def.n} · {def.p === '$' ? '$' + def.d[hoverIndex].toFixed(2) : Math.round(def.d[hoverIndex])}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
-export default App;
+export default function App() {
+  const [cur, setCur] = useState<Screen>('disc');
+  const [dtab, setDtab] = useState<CampaignTab>('d');
+  const [ptab, setPtab] = useState<PersonalTab>('c');
+  const [snTab, setSnTab] = useState<PersonalSettingsTab>('d');
+  const [devTab, setDevTab] = useState<DevTab>('asc');
+
+  // Window width for mobile adaptation
+  const [windowWidth, setWindowWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1200));
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  const isMobile = windowWidth < 768;
+
+  // App core state
+  const [campaignState, setCampaignState] = useState({
+    nm: 'Palazzo Lens',
+    asc: true,
+    sdk: true,
+    fund: true,
+  });
+
+  // Financial state
+  const [bal, setBal] = useState(99.5);
+  const [paid, setPaid] = useState(88.5);
+  const [cards, setCards] = useState<Card[]>([
+    { id: 1, b: 'VISA', l: 'Visa ••••4417', e: '08/28' },
+  ]);
+  const [selCard, setSelCard] = useState(1);
+  const [nextCardId, setNextCardId] = useState(2);
+
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [csel, setCsel] = useState<Record<string, number>>({ 'All Categories': 1 });
+
+  // Calendar in Discover
+  const [calYm, setCalYm] = useState<[number, number]>([2026, 9]);
+
+  // Overlays
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+
+  // Profile
+  const [profName, setProfName] = useState('Maya Chen');
+  const [isEditingProf, setIsEditingProf] = useState(false);
+  const [editFirstName, setEditFirstName] = useState('Maya');
+  const [editLastName, setEditLastName] = useState('Chen');
+  const [editDesc, setEditDesc] = useState('');
+
+  // Personal creators approval state
+  const [creatorApprovals, setCreatorApprovals] = useState<Record<string, 'approved' | 'declined' | null>>({});
+
+  // Campaign public page
+  const [joinRequested, setJoinRequested] = useState(false);
+
+  // Creator claim page
+  const [codeClaimed, setCodeClaimed] = useState(false);
+  const [claimingLoading, setClaimingLoading] = useState(false);
+  const [claimData, setClaimData] = useState<{ link: string; code: string; seed: number } | null>(null);
+
+  // Withdraw screen form
+  const [withdrawAmount, setWithdrawAmount] = useState('99.50');
+  const [withdrawError, setWithdrawError] = useState('');
+  const [withdrawDone, setWithdrawDone] = useState(false);
+  const [addCardOpen, setAddCardOpen] = useState(false);
+  const [newCardName, setNewCardName] = useState('');
+  const [newCardNumber, setNewCardNumber] = useState('');
+  const [newCardExpiry, setNewCardExpiry] = useState('');
+  const [newCardCvc, setNewCardCvc] = useState('');
+  const [addCardError, setAddCardError] = useState('');
+
+  // New campaign form
+  const [newCampName, setNewCampName] = useState('');
+  const [startDateStr, setStartDateStr] = useState('Tue, Oct 27');
+  const [endDateStr, setEndDateStr] = useState('Tue, Oct 27');
+  const [startTimeStr, setStartTimeStr] = useState('10:30 AM');
+  const [endTimeStr, setEndTimeStr] = useState('11:30 AM');
+  const [datePickerTarget, setDatePickerTarget] = useState<'s' | 'e' | null>(null);
+
+  // Developer console
+  const [devBundleId, setDevBundleId] = useState('');
+  const [devIssuerId, setDevIssuerId] = useState('');
+  const [devKeyId, setDevKeyId] = useState('');
+  const [devKeyUploaded, setDevKeyUploaded] = useState(false);
+  const [devError, setDevError] = useState('');
+  const [devTesting, setDevTesting] = useState(false);
+  const [devTestStatus, setDevTestStatus] = useState('');
+
+  // Chart Metric Keys
+  const [earnMetric, setEarnMetric] = useState('ea');
+  const [insightMetric, setInsightMetric] = useState('rev');
+  const [joinMetric, setJoinMetric] = useState('er');
+
+  // Copy feedback
+  const [copiedAppKey, setCopiedAppKey] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const isLive = campaignState.asc && campaignState.sdk && campaignState.fund;
+
+  // Toast auto-clear
+  const showToast = (text: string) => {
+    setToastMsg(text);
+    setTimeout(() => {
+      setToastMsg(t => (t === text ? '' : t));
+    }, 1800);
+  };
+
+  const closeAllOverlays = () => {
+    setNotifOpen(false);
+    setMoreMenuOpen(false);
+    setSettingsModalOpen(false);
+    setDatePickerTarget(null);
+  };
+
+  const navigateTo = (scr: Screen, opt?: string) => {
+    closeAllOverlays();
+    setCur(scr);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (scr === 'pers' && opt) {
+      setPtab((opt as PersonalTab) || 'c');
+    }
+    if (scr === 'dev' && opt) {
+      setDevTab((opt as DevTab) || 'asc');
+    }
+    if (scr === 'wd') {
+      setWithdrawDone(false);
+      setWithdrawError('');
+      setWithdrawAmount(bal.toFixed(2));
+      setAddCardOpen(false);
+    }
+  };
+
+  // Calendar days generation
+  const calDays = useMemo(() => {
+    const [y, m] = calYm;
+    const f = new Date(y, m, 1).getDay();
+    const dm = new Date(y, m + 1, 0).getDate();
+    const pd = new Date(y, m, 0).getDate();
+    const rows: { text: number; isGray: boolean; isTarget: boolean }[][] = [];
+
+    for (let r = 0; r < 6; r++) {
+      const row: { text: number; isGray: boolean; isTarget: boolean }[] = [];
+      for (let c = 0; c < 7; c++) {
+        const d = r * 7 + c - f + 1;
+        let text = d;
+        let isGray = false;
+        let isTarget = false;
+        if (d < 1) {
+          text = pd + d;
+          isGray = true;
+        } else if (d > dm) {
+          text = d - dm;
+          isGray = true;
+        } else if (y === 2026 && m === 9 && d === 27) {
+          isTarget = true;
+        }
+        row.push({ text, isGray, isTarget });
+      }
+      rows.push(row);
+    }
+    return rows;
+  }, [calYm]);
+
+  // Discover campaigns list filter
+  const allCampaignsData = [
+    {
+      t: 'Palazzo Lens',
+      bg: '#e4d8ff',
+      ic: 'ti-aperture',
+      c: 'Photo and video',
+      sub: '20% of subscription revenue · Ends Nov 27',
+      by: 'Maya Chen · Photo and video',
+      d: 'Palazzo Lens turns ordinary shots into polished portraits in seconds. Creators earn a share of every subscription they bring in, with no minimum audience and no exclusivity,… ',
+    },
+    {
+      t: 'Tidal',
+      bg: '#cfe8dc',
+      ic: 'ti-wave-sine',
+      c: 'Productivity',
+      sub: '25% of subscription revenue · Ends Dec 3',
+      by: 'Dawit Bekele · Productivity',
+      d: 'Tidal is a focus timer that follows your natural energy through the day. Share your link, earn a share of every subscription, and watch results arrive in real time,… ',
+      nw: true,
+    },
+    {
+      t: 'Lumen Habit',
+      bg: '#ffd9e8',
+      ic: 'ti-sun',
+      c: 'Health',
+      sub: '15% of subscription revenue · Ends Nov 30',
+      by: 'Hana Mulugeta · Health',
+      d: 'Lumen Habit helps people build small routines that stick, with gentle reminders and weekly summaries. A great fit for wellness and lifestyle creators,… ',
+      nw: true,
+    },
+  ];
+
+  const filteredCampaigns = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    const isAll = Boolean(csel['All Categories']);
+    return allCampaignsData.filter(item => {
+      const matchQuery = !q || item.t.toLowerCase().includes(q);
+      const matchCat = isAll || Boolean(csel[item.c]);
+      return matchQuery && matchCat;
+    });
+  }, [searchQuery, csel]);
+
+  // Chart configs
+  const earnChartConfig: ChartConfig = useMemo(
+    () => ({
+      vw: 984,
+      vh: 280,
+      dts: ['Sep 29', 'Oct 5', 'Oct 11', 'Oct 17', 'Oct 23'],
+      empty: false,
+      em: '',
+      order: ['ea', 'su'],
+      defs: {
+        ea: { n: 'Earned', d: generatePoints(5, 7.4), p: '$' },
+        su: { n: 'Paying subscribers', d: generatePoints(6, 0.7), p: '' },
+      },
+    }),
+    []
+  );
+
+  // Note: Insights bug fixed - when !isLive, empty is explicitly true!
+  const insightChartConfig: ChartConfig = useMemo(
+    () => ({
+      vw: 984,
+      vh: 280,
+      dts: ['Sep 29', 'Oct 5', 'Oct 11', 'Oct 17', 'Oct 23'],
+      empty: !isLive,
+      em: 'Waiting for the first subscription.',
+      order: ['rev', 'clk', 'ref', 'sub'],
+      defs: {
+        rev: { n: 'Attributed revenue', d: generatePoints(1, 172), p: '$' },
+        clk: { n: 'Link clicks', d: generatePoints(2, 640), p: '' },
+        ref: { n: 'Referred users', d: generatePoints(3, 42), p: '' },
+        sub: { n: 'Paying subscribers', d: generatePoints(4, 7.6), p: '' },
+      },
+    }),
+    [isLive]
+  );
+
+  const joinChartConfig: ChartConfig = useMemo(
+    () => ({
+      vw: 820,
+      vh: 260,
+      dts: ['Oct 14', 'Oct 20', 'Oct 27'],
+      empty: !codeClaimed,
+      em: 'Claim your code to start tracking.',
+      order: ['er', 'ck', 'rf', 'sb'],
+      defs: {
+        er: { n: 'Earned', d: generatePoints(7, 3.2, 14), p: '$' },
+        ck: { n: 'Link clicks', d: generatePoints(8, 15, 14), p: '' },
+        rf: { n: 'Referred users', d: generatePoints(9, 4.4, 14), p: '' },
+        sb: { n: 'Paying subscribers', d: generatePoints(10, 1.3, 14), p: '' },
+      },
+    }),
+    [codeClaimed]
+  );
+
+  // Setup progress steps in Personal Insights
+  const setupSteps = [
+    { label: 'Campaign created', action: '' },
+    { label: 'Connect App Store', action: 'Connect App Store', done: campaignState.asc },
+    { label: 'Add the SDK', action: 'Open SDK setup', done: campaignState.sdk },
+    { label: 'Fund wallet', action: 'Add funds', done: campaignState.fund },
+  ];
+  let firstIncomplete = -1;
+  for (let i = 0; i < setupSteps.length; i++) {
+    const isDone = i === 0 || setupSteps[i].done;
+    if (!isDone && firstIncomplete < 0) {
+      firstIncomplete = i;
+      break;
+    }
+  }
+
+  // Handle claiming creator code
+  const handleClaimCode = () => {
+    if (claimingLoading || codeClaimed) return;
+    setClaimingLoading(true);
+    setTimeout(() => {
+      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+      let r = '';
+      for (let i = 0; i < 5; i++) r += chars[Math.floor(Math.random() * chars.length)];
+      const link = 'umi.link/pl-' + r;
+      const code = 'MAYA-' + r.toUpperCase();
+      let sd = 0;
+      for (let i = 0; i < link.length; i++) sd = (sd * 31 + link.charCodeAt(i)) % 233280;
+
+      setClaimData({ link, code, seed: sd || 7 });
+      setCodeClaimed(true);
+      setClaimingLoading(false);
+    }, 600);
+  };
+
+  // Nav Item Active Index
+  const railActiveIdx = cur === 'disc' ? 0 : cur === 'earn' ? 2 : cur === 'prof' ? 3 : -1;
+
+  // Is this a sidebar screen (Section A: disc, earn, prof, pers)?
+  const isSidebarScreen = cur === 'disc' || cur === 'earn' || cur === 'prof' || cur === 'pers';
+
+  return (
+    <div
+      id="w"
+      onClick={() => {
+        if (moreMenuOpen) setMoreMenuOpen(false);
+        if (datePickerTarget) setDatePickerTarget(null);
+      }}
+    >
+      <div
+        id="s"
+        className={`${notifOpen ? 'no nc ' : ''}${settingsModalOpen ? 'so ' : ''}`}
+      >
+        {/* ================= SECTION A: SIDEBAR RAIL (350 CSS px wide) ================= */}
+        {isSidebarScreen && (
+          <div className="rail" data-a={railActiveIdx}>
+            <svg
+              style={{ position: 'absolute', left: 16, top: 20 }}
+              width="26"
+              height="26"
+              viewBox="0 0 30 30"
+              fill="#C9B8FF"
+            >
+              <ellipse cx="15" cy="8" rx="4.6" ry="7" />
+              <ellipse cx="15" cy="22" rx="4.6" ry="7" />
+              <ellipse cx="8" cy="15" rx="7" ry="4.6" />
+              <ellipse cx="22" cy="15" rx="7" ry="4.6" />
+            </svg>
+
+            <div className="rl">
+              {/* 0: Campaigns */}
+              <div
+                className={`it ${cur === 'disc' && !notifOpen ? 'a' : ''}`}
+                onClick={() => navigateTo('disc')}
+              >
+                <i className="ti ti-speakerphone" />
+                <span className="t">Campaigns</span>
+              </div>
+
+              {/* 1: Notifications */}
+              <div
+                className={`it ${notifOpen ? 'a' : ''}`}
+                onClick={() => {
+                  setMoreMenuOpen(false);
+                  setNotifOpen(!notifOpen);
+                }}
+              >
+                <i className="ti ti-bell" />
+                <span className="t">Notifications</span>
+              </div>
+
+              {/* 2: Earnings */}
+              <div
+                className={`it ${cur === 'earn' && !notifOpen ? 'a' : ''}`}
+                onClick={() => navigateTo('earn')}
+              >
+                <i className="ti ti-coin" />
+                <span className="t">Earnings</span>
+              </div>
+
+              {/* 3: Profile */}
+              <div
+                className={`it ${cur === 'prof' && !notifOpen ? 'a' : ''}`}
+                onClick={() => navigateTo('prof')}
+              >
+                <span
+                  className="av"
+                  style={{ width: 24, height: 24, background: '#9be3c6', gap: 3 }}
+                >
+                  <b style={{ width: 4, height: 8 }} />
+                  <b style={{ width: 4, height: 8 }} />
+                </span>
+                <span className="t">Profile</span>
+              </div>
+            </div>
+
+            {/* Bottom More menu button */}
+            <div
+              className="it rail-more"
+              id="mb"
+              onClick={e => {
+                e.stopPropagation();
+                setMoreMenuOpen(!moreMenuOpen);
+              }}
+            >
+              <i className="ti ti-menu-2" />
+              <span className="t">More</span>
+            </div>
+          </div>
+        )}
+
+        {/* ================= SCREEN 1: CAMPAIGNS (disc) ================= */}
+        <div className={`scr ${cur === 'disc' ? 'on' : ''}`} id="disc">
+          <div
+            className="mobile-content mobile-col"
+            style={{
+              marginLeft: isMobile ? 0 : 368, // rail 350 + 18 inset = 368
+              display: 'flex',
+              padding: isMobile ? '16px' : '24px 24px 80px',
+              maxWidth: 1360,
+            }}
+          >
+            {/* Center text column: 585 CSS px wide */}
+            <div
+              className="mobile-full"
+              style={{ width: isMobile ? '100%' : 585, flexShrink: 0 }}
+            >
+              <div className="hh">
+                <div className="h1">Campaigns</div>
+                <div style={{ position: 'relative' }}>
+                  <i
+                    className="ti ti-search"
+                    style={{ position: 'absolute', left: 12, top: 11, fontSize: 16, color: '#6f6f74' }}
+                  />
+                  <input
+                    id="sq"
+                    className="srch"
+                    placeholder="Search campaigns"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Mobile Categories Horizontal Chip Row: 36px tall */}
+              {isMobile && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    overflowX: 'auto',
+                    padding: '12px 0 6px',
+                    height: 54,
+                    scrollbarWidth: 'none',
+                  }}
+                >
+                  {CATEGORIES.map(cat => {
+                    const isSelected = Boolean(csel[cat]);
+                    return (
+                      <div
+                        key={cat}
+                        style={{
+                          height: 36,
+                          padding: '0 14px',
+                          borderRadius: 18,
+                          background: isSelected ? '#C9B8FF' : '#1e1e22',
+                          color: isSelected ? '#0a0a0a' : '#d4d4d8',
+                          fontSize: 14,
+                          fontWeight: 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          whiteSpace: 'nowrap',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => {
+                          if (cat === 'All Categories') setCsel({ 'All Categories': 1 });
+                          else {
+                            setCsel(prev => {
+                              const copy = { ...prev };
+                              delete copy['All Categories'];
+                              if (copy[cat]) delete copy[cat];
+                              else copy[cat] = 1;
+                              if (Object.keys(copy).length === 0) return { 'All Categories': 1 };
+                              return copy;
+                            });
+                          }
+                        }}
+                      >
+                        {cat}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Tabs: Discover / Joined / Created */}
+              <div className="tbs" id="dt">
+                <div
+                  className={`tb ${dtab === 'd' ? 'a' : ''}`}
+                  onClick={() => setDtab('d')}
+                >
+                  Discover
+                </div>
+                <div
+                  className={`tb ${dtab === 'j' ? 'a' : ''}`}
+                  onClick={() => setDtab('j')}
+                >
+                  Joined
+                </div>
+                <div
+                  className={`tb ${dtab === 'c' ? 'a' : ''}`}
+                  onClick={() => setDtab('c')}
+                >
+                  Created
+                </div>
+              </div>
+
+              {/* Campaign list */}
+              <div id="lst">
+                {dtab === 'd' && (
+                  <>
+                    <div className="sh">
+                      <span>Featured</span>
+                      <span style={{ display: 'flex', gap: 24, fontSize: 18, color: '#8d8d92' }}>
+                        <i className="ti ti-chevron-left" style={{ cursor: 'pointer' }} />
+                        <i className="ti ti-chevron-right" style={{ cursor: 'pointer' }} />
+                      </span>
+                    </div>
+
+                    {/* Palazzo Lens Featured */}
+                    {filteredCampaigns
+                      .filter(c => c.t === 'Palazzo Lens')
+                      .map(o => (
+                        <div
+                          key={o.t}
+                          className="ci"
+                          onClick={() => navigateTo('camp')}
+                        >
+                          <div className="ch">
+                            <div className="tl ctl" style={{ background: o.bg }}>
+                              <i className={`ti ${o.ic}`} />
+                            </div>
+                            <div style={{ paddingTop: 4 }}>
+                              <div className="ctt">
+                                {o.t}
+                                <span className="vb">
+                                  <i className="ti ti-check" />
+                                </span>
+                              </div>
+                              <div className="cs">{o.sub}</div>
+                            </div>
+                          </div>
+                          <div className="cm">
+                            <i className="ti ti-user" style={{ fontSize: 16 }} />
+                            {o.by}
+                          </div>
+                          <div className="cd">
+                            {o.d}
+                            <b style={{ fontWeight: 600, color: '#fff' }}>see more</b>
+                          </div>
+                        </div>
+                      ))}
+
+                    <div
+                      className="sh"
+                      style={{
+                        borderBottom: '1px solid #161618',
+                        paddingBottom: 16,
+                        height: 48,
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <span>New this week</span>
+                    </div>
+
+                    {filteredCampaigns
+                      .filter(c => c.t !== 'Palazzo Lens')
+                      .map(o => (
+                        <div
+                          key={o.t}
+                          className="ci"
+                          onClick={() => navigateTo('camp')}
+                        >
+                          <div className="ch">
+                            <div className="tl ctl" style={{ background: o.bg }}>
+                              <i className={`ti ${o.ic}`} />
+                            </div>
+                            <div style={{ paddingTop: 4 }}>
+                              <div className="ctt">
+                                {o.t}
+                                <span className="vb">
+                                  <i className="ti ti-check" />
+                                </span>
+                              </div>
+                              <div className="cs">
+                                {o.sub}
+                                {o.nw && (
+                                  <span
+                                    style={{
+                                      color: '#C9B8FF',
+                                      fontSize: 14,
+                                      fontWeight: 600,
+                                      marginLeft: 6,
+                                    }}
+                                  >
+                                    ● NEW
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="cm">
+                            <i className="ti ti-user" style={{ fontSize: 16 }} />
+                            {o.by}
+                          </div>
+                          <div className="cd">
+                            {o.d}
+                            <b style={{ fontWeight: 600, color: '#fff' }}>see more</b>
+                          </div>
+                        </div>
+                      ))}
+                  </>
+                )}
+
+                {dtab === 'j' && (
+                  <>
+                    <div className="sh">
+                      <span>Joined</span>
+                    </div>
+                    <div className="ci" onClick={() => navigateTo('join')}>
+                      <div className="ch">
+                        <div className="tl ctl" style={{ background: '#e4d8ff' }}>
+                          <i className="ti ti-aperture" />
+                        </div>
+                        <div style={{ paddingTop: 4 }}>
+                          <div className="ctt">
+                            Palazzo Lens
+                            <span className="vb">
+                              <i className="ti ti-check" />
+                            </span>
+                          </div>
+                          <div className="cs">Approved · 18 paying subscribers · $90.00 earned</div>
+                        </div>
+                      </div>
+                      <div className="cm">
+                        <i className="ti ti-user" style={{ fontSize: 16 }} />
+                        Maya Chen · Photo and video
+                      </div>
+                      <div className="cd">
+                        Open to claim your link and see your analytics.
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {dtab === 'c' && (
+                  <>
+                    <div className="sh">
+                      <span>Created</span>
+                    </div>
+                    <div
+                      className="ci"
+                      onClick={() => navigateTo('pers', 'i')}
+                    >
+                      <div className="ch">
+                        <div className="tl ctl" style={{ background: '#e4d8ff' }}>
+                          <i className="ti ti-aperture" />
+                        </div>
+                        <div style={{ paddingTop: 4 }}>
+                          <div className="ctt">
+                            {campaignState.nm}
+                            <span className="vb">
+                              <i className="ti ti-check" />
+                            </span>
+                          </div>
+                          <div className="cs">
+                            {isLive ? 'Live' : 'Setting up'} · 20% of subscription revenue
+                          </div>
+                        </div>
+                      </div>
+                      <div className="cm">
+                        <i className="ti ti-user" style={{ fontSize: 16 }} />
+                        You
+                      </div>
+                      <div className="cd">Open to see analytics and finish setup.</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Right widget column: 274 CSS px wide, starting 95 CSS px after text column */}
+            <div
+              className="mobile-full"
+              style={{
+                width: isMobile ? '100%' : 274,
+                marginLeft: isMobile ? 0 : 95,
+                flexShrink: 0,
+                marginTop: 4,
+              }}
+            >
+              <div className="nb" onClick={() => navigateTo('new')}>
+                New Campaign
+                <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
+              </div>
+
+              <div className="card" style={{ marginTop: 22, padding: '16px 18px 20px' }}>
+                <div
+                  style={{
+                    height: 38,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0 6px',
+                    fontSize: 18,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span id="cm2">
+                    {MONTHS[calYm[1]]} {calYm[0]}
+                  </span>
+                  <span style={{ display: 'flex', gap: 16, fontSize: 16, color: '#a6a6aa' }}>
+                    <i
+                      className="ti ti-chevron-left"
+                      id="cpv"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        setCalYm(([y, m]) => (m === 0 ? [y - 1, 11] : [y, m - 1]));
+                      }}
+                    />
+                    <i
+                      className="ti ti-chevron-right"
+                      id="cnx"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        setCalYm(([y, m]) => (m === 11 ? [y + 1, 0] : [y, m + 1]));
+                      }}
+                    />
+                  </span>
+                </div>
+
+                <div className="cr h">
+                  <span>Su</span>
+                  <span>Mo</span>
+                  <span>Tu</span>
+                  <span>We</span>
+                  <span>Th</span>
+                  <span>Fr</span>
+                  <span>Sa</span>
+                </div>
+
+                <div id="cg">
+                  {calDays.map((row, rIdx) => (
+                    <div className="cr" key={rIdx}>
+                      {row.map((day, cIdx) => (
+                        <span
+                          key={cIdx}
+                          className={`${day.isGray ? 'g' : ''} ${day.isTarget ? 't' : ''}`}
+                        >
+                          {day.text}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ height: 1, background: '#1f1f22', marginTop: 20 }} />
+                <div
+                  style={{
+                    marginTop: 22,
+                    fontSize: 18,
+                    lineHeight: '26px',
+                    fontWeight: 600,
+                    paddingLeft: 6,
+                  }}
+                >
+                  Categories
+                </div>
+
+                <div id="ct" style={{ marginTop: 8 }}>
+                  {CATEGORIES.map(cat => {
+                    const isSelected = Boolean(csel[cat]);
+                    return (
+                      <div
+                        key={cat}
+                        className="ck"
+                        onClick={() => {
+                          if (cat === 'All Categories') {
+                            setCsel({ 'All Categories': 1 });
+                          } else {
+                            setCsel(prev => {
+                              const copy = { ...prev };
+                              delete copy['All Categories'];
+                              if (copy[cat]) delete copy[cat];
+                              else copy[cat] = 1;
+                              if (Object.keys(copy).length === 0) {
+                                return { 'All Categories': 1 };
+                              }
+                              return copy;
+                            });
+                          }
+                        }}
+                      >
+                        <span className={`bx ${isSelected ? 'on' : ''}`}>
+                          {isSelected && <i className="ti ti-check" />}
+                        </span>
+                        <span style={{ color: isSelected ? undefined : '#a6a6aa' }}>
+                          {cat}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ================= SCREEN 2: EARNINGS (earn) ================= */}
+        <div className={`scr ${cur === 'earn' ? 'on' : ''}`} id="earn">
+          <div
+            className="mobile-content"
+            style={{
+              marginLeft: isMobile ? 0 : 368, // rail 350 + 18 inset
+              maxWidth: 787,
+              padding: isMobile ? '16px' : '24px 0 90px',
+            }}
+          >
+            <div className="hh" style={{ height: 42 }}>
+              <div className="h1">Earnings</div>
+              <div
+                className="btn wb"
+                style={{ height: 42, fontSize: 16, padding: '0 18px' }}
+                onClick={() => navigateTo('wd')}
+              >
+                <i className="ti ti-arrow-up-right" style={{ fontSize: 18 }} />
+                Withdraw
+              </div>
+            </div>
+
+            <div style={{ marginTop: 26, fontSize: 15, color: '#bdbdc1', lineHeight: '22px' }}>
+              Available to withdraw
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+              <span
+                id="bal"
+                style={{
+                  fontSize: 52,
+                  lineHeight: '64px',
+                  fontWeight: 500,
+                  letterSpacing: -1,
+                }}
+              >
+                {formatMoney(bal)}
+              </span>
+              <span style={{ fontSize: 15, color: '#a6a6aa' }}>USD in your Stripe balance</span>
+            </div>
+
+            <div style={{ display: 'flex', marginTop: 24, height: 96 }} id="est">
+              <div className="stat">
+                <div className="a1">
+                  <i className="ti ti-clock" style={{ fontSize: 16 }} />
+                  Pending
+                </div>
+                <div className="a2">$12.00</div>
+                <div className="a3">In the 30-day hold</div>
+              </div>
+              <div className="stat">
+                <div className="a1">
+                  <i className="ti ti-calendar-event" style={{ fontSize: 16 }} />
+                  Payable
+                </div>
+                <div className="a2">$6.00</div>
+                <div className="a3">Next weekly payout run</div>
+              </div>
+              <div className="stat">
+                <div className="a1">
+                  <i className="ti ti-send" style={{ fontSize: 16 }} />
+                  Paid out
+                </div>
+                <div className="a2">$188.00</div>
+                <div className="a3">Sent to your Stripe balance</div>
+              </div>
+              <div className="stat">
+                <div className="a1">
+                  <i className="ti ti-arrow-back-up" style={{ fontSize: 16 }} />
+                  Reversed
+                </div>
+                <div className="a2">$4.20</div>
+                <div className="a3">2 refunded payments</div>
+              </div>
+            </div>
+
+            <div className="info">
+              <i className="ti ti-info-circle" style={{ fontSize: 16 }} />
+              Earnings are held for 30 days to cover refunds, then paid out in the weekly run.
+            </div>
+            <div className="dv" />
+
+            <div
+              style={{
+                marginTop: 28,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                height: 38,
+              }}
+            >
+              <div className="h2">Performance</div>
+              <SvgChart
+                config={earnChartConfig}
+                currentKey={earnMetric}
+                onSelectKey={setEarnMetric}
+              />
+            </div>
+
+            <div className="dv" />
+
+            <div className="h2" style={{ marginTop: 32 }}>
+              By Campaign
+            </div>
+            <div className="sub" style={{ marginTop: 2 }}>
+              What each campaign has earned you.
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div className="tr th">
+                <span>Campaign</span>
+                <span className="r">Share</span>
+                <span className="r">Subscribers</span>
+                <span className="r">Earned</span>
+              </div>
+              <div className="tr">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span
+                    className="tl"
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 9,
+                      background: '#e4d8ff',
+                      fontSize: 18,
+                    }}
+                  >
+                    <i className="ti ti-aperture" />
+                  </span>
+                  <b style={{ fontWeight: 500, fontSize: 16 }}>Palazzo Lens</b>
+                </span>
+                <span className="r" style={{ color: '#a6a6aa' }}>
+                  20%
+                </span>
+                <span className="r">18</span>
+                <span className="r" style={{ fontWeight: 500 }}>
+                  $90.00
+                </span>
+              </div>
+              <div className="tr">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span
+                    className="tl"
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 9,
+                      background: '#cfe8dc',
+                      fontSize: 18,
+                    }}
+                  >
+                    <i className="ti ti-wave-sine" />
+                  </span>
+                  <b style={{ fontWeight: 500, fontSize: 16 }}>Tidal</b>
+                </span>
+                <span className="r" style={{ color: '#a6a6aa' }}>
+                  25%
+                </span>
+                <span className="r">12</span>
+                <span className="r" style={{ fontWeight: 500 }}>
+                  $67.00
+                </span>
+              </div>
+              <div className="tr">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span
+                    className="tl"
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 9,
+                      background: '#ffd9e8',
+                      fontSize: 18,
+                    }}
+                  >
+                    <i className="ti ti-sun" />
+                  </span>
+                  <b style={{ fontWeight: 500, fontSize: 16 }}>Lumen Habit</b>
+                </span>
+                <span className="r" style={{ color: '#a6a6aa' }}>
+                  15%
+                </span>
+                <span className="r">6</span>
+                <span className="r" style={{ fontWeight: 500 }}>
+                  $31.00
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ================= SCREEN 3: PROFILE (prof) ================= */}
+        <div className={`scr ${cur === 'prof' ? 'on' : ''}`} id="prof">
+          <div
+            className="mobile-content mobile-col"
+            style={{
+              marginLeft: isMobile ? 0 : 368, // rail 350 + 18 inset
+              display: 'flex',
+              minHeight: '100vh',
+              maxWidth: 1040,
+            }}
+          >
+            {/* Center profile card: banner 185 tall, avatar 124, buttons 34 tall radius 10 */}
+            <div
+              className={`pc2 ${isEditingProf ? 'ed' : ''} mobile-full`}
+              id="pf"
+              style={{ width: isMobile ? '100%' : 674 }}
+            >
+              <div className="bn" style={{ height: isMobile ? 120 : undefined }} />
+              <div
+                className="avl"
+                style={{
+                  width: isMobile ? 88 : 124,
+                  height: isMobile ? 88 : 124,
+                  top: isMobile ? 76 : undefined,
+                }}
+              >
+                <div
+                  className="fc"
+                  style={{
+                    width: isMobile ? 64 : 86,
+                    height: isMobile ? 64 : 86,
+                  }}
+                >
+                  <b />
+                  <b />
+                </div>
+              </div>
+
+              <div
+                className="pbt"
+                style={{
+                  top: isMobile ? 130 : undefined,
+                }}
+              >
+                {!isEditingProf ? (
+                  <>
+                    <div
+                      className="pb nn"
+                      id="bset"
+                      onClick={() => setSettingsModalOpen(true)}
+                    >
+                      Settings
+                    </div>
+                    <div
+                      className="pb nn"
+                      id="bed"
+                      onClick={() => setIsEditingProf(true)}
+                    >
+                      Edit Profile
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      className="pb cn2 ne"
+                      id="bcn"
+                      onClick={() => setIsEditingProf(false)}
+                    >
+                      Cancel
+                    </div>
+                    <div
+                      className="pb sv ne"
+                      id="bsv"
+                      onClick={() => {
+                        const full = `${editFirstName} ${editLastName}`.trim();
+                        setProfName(full || 'Maya Chen');
+                        setIsEditingProf(false);
+                      }}
+                    >
+                      Save
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div
+                className="inf"
+                style={{
+                  top: isMobile ? 180 : undefined,
+                }}
+              >
+                <div className="nmx">
+                  {!isEditingProf ? (
+                    <span className="nn" id="nmt">
+                      {profName}
+                    </span>
+                  ) : (
+                    <span className="ne">
+                      <input
+                        className="fe"
+                        style={{ width: 120, background: 'transparent', color: '#fff' }}
+                        value={editFirstName}
+                        onChange={e => setEditFirstName(e.target.value)}
+                      />
+                      <input
+                        className="fe"
+                        style={{ width: 120, background: 'transparent', color: '#fff' }}
+                        value={editLastName}
+                        onChange={e => setEditLastName(e.target.value)}
+                      />
+                    </span>
+                  )}
+                </div>
+                <div className="hd3">maya</div>
+
+                <div className="r3">
+                  {!isEditingProf ? (
+                    <span className="nn" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <i className="ti ti-link" style={{ fontSize: 16, color: '#bdbdc1' }} />
+                      {editDesc || 'Instagram and 1 more'}
+                    </span>
+                  ) : (
+                    <span className="ne">
+                      <input
+                        className="di"
+                        placeholder="Add a description…"
+                        value={editDesc}
+                        onChange={e => setEditDesc(e.target.value)}
+                      />
+                    </span>
+                  )}
+                </div>
+
+                <div className="r4">
+                  {!isEditingProf ? (
+                    <span className="nn" style={{ display: 'flex', gap: 14 }}>
+                      <span>
+                        <b>18</b> subscribers
+                      </span>
+                      <span>
+                        <b>3</b> campaigns
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="ne" style={{ fontWeight: 600, color: '#fff' }}>
+                      Edit Social Links
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right requests panel: 325 CSS px wide */}
+            <div
+              className="rq mobile-full"
+              style={{ width: isMobile ? '100%' : 325, marginTop: isMobile ? 160 : 0 }}
+            >
+              <div className="rqh">
+                <span>Requests</span>
+                <i className="ti ti-filter" style={{ fontSize: 18, color: '#bdbdc1' }} />
+              </div>
+              <div className="rr">
+                <div
+                  className="tl"
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: '#e4d8ff',
+                    fontSize: 18,
+                  }}
+                >
+                  <i className="ti ti-aperture" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 600, lineHeight: '22px' }}>
+                    Palazzo Lens
+                  </div>
+                  <div style={{ fontSize: 14, color: '#8d8d92' }}>Oct 24</div>
+                </div>
+                <span className="pill l" style={{ marginLeft: 'auto' }}>
+                  Approved
+                </span>
+              </div>
+              <div className="rr">
+                <div
+                  className="tl"
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: '#cfe8dc',
+                    fontSize: 18,
+                  }}
+                >
+                  <i className="ti ti-wave-sine" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 600, lineHeight: '22px' }}>Tidal</div>
+                  <div style={{ fontSize: 14, color: '#8d8d92' }}>Oct 26</div>
+                </div>
+                <span className="pill" style={{ marginLeft: 'auto' }}>
+                  Pending
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ================= SCREEN 4: PERSONAL (pers) ================= */}
+        <div className={`scr ${cur === 'pers' ? 'on' : ''}`} id="pers">
+          <div
+            className="mobile-content"
+            style={{
+              marginLeft: isMobile ? 0 : 368, // rail 350 + 18 inset
+              paddingBottom: 90,
+              maxWidth: 787,
+            }}
+          >
+            <div className="hd">Personal</div>
+
+            <div className="tabs" id="pt">
+              {(
+                [
+                  ['c', 'Campaigns'],
+                  ['r', 'Creators'],
+                  ['p', 'Payment'],
+                  ['i', 'Insights'],
+                  ['s', 'Settings'],
+                ] as const
+              ).map(([tabKey, label]) => (
+                <div
+                  key={tabKey}
+                  className={`tab ${ptab === tabKey ? 'a' : ''}`}
+                  onClick={() => setPtab(tabKey)}
+                >
+                  {label}
+                </div>
+              ))}
+            </div>
+
+            <div className="col" style={{ marginLeft: 18, width: '100%', maxWidth: 787, padding: '24px 0 90px' }}>
+              {/* TAB c: Campaigns */}
+              {ptab === 'c' && (
+                <div className="pn" data-p="c">
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      height: 38,
+                    }}
+                  >
+                    <div className="h2">Campaigns</div>
+                    <div
+                      className="btn sm"
+                      style={{ width: 90 }}
+                      onClick={() => navigateTo('new')}
+                    >
+                      Create
+                    </div>
+                  </div>
+                  <div className="sub" style={{ marginTop: 2 }}>
+                    Campaigns you’ve created and funded.
+                  </div>
+
+                  <div className="card" style={{ marginTop: 20, overflow: 'hidden' }} id="pcl">
+                    <div
+                      className="lr"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => setPtab('i')}
+                    >
+                      <div className="tl lt" style={{ background: '#e4d8ff' }}>
+                        <i className="ti ti-aperture" />
+                      </div>
+                      <div>
+                        <div className="ln">{campaignState.nm}</div>
+                        <div className="lm">20% of subscription revenue · 128 creators</div>
+                      </div>
+                      <div className="lx">
+                        <span className="pill l">{isLive ? 'Live' : 'Setting up'}</span>
+                      </div>
+                    </div>
+
+                    <div className="lr">
+                      <div className="tl lt" style={{ background: '#cfe8dc' }}>
+                        <i className="ti ti-wave-sine" />
+                      </div>
+                      <div>
+                        <div className="ln">Tidal</div>
+                        <div className="lm">25% of subscription revenue · 74 creators</div>
+                      </div>
+                      <div className="lx">
+                        <span className="pill l">Live</span>
+                      </div>
+                    </div>
+
+                    <div className="lr">
+                      <div className="tl lt" style={{ background: '#ffe1c8' }}>
+                        <i className="ti ti-notebook" />
+                      </div>
+                      <div>
+                        <div className="ln">Pocket Ledger</div>
+                        <div className="lm">15% of subscription revenue · 41 creators</div>
+                      </div>
+                      <div className="lx">
+                        <span className="pill">Paused</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB r: Creators */}
+              {ptab === 'r' && (
+                <div className="pn" data-p="r">
+                  <div className="h2">Creators</div>
+                  <div className="sub" style={{ marginTop: 2 }}>
+                    Approve creators and see what they’ve earned you.
+                  </div>
+
+                  <div className="lab" style={{ marginTop: 24 }}>
+                    Requests
+                  </div>
+                  <div className="card" style={{ marginTop: 10, overflow: 'hidden' }}>
+                    {/* Amira Hassan */}
+                    <div className="lr">
+                      <span className="av" style={{ width: 38, height: 38, background: '#f4c4d8' }}>
+                        <b />
+                        <b />
+                      </span>
+                      <div>
+                        <div className="ln">Amira Hassan</div>
+                        <div className="lm">Requested Palazzo Lens · 2h ago</div>
+                      </div>
+                      <div className="lx">
+                        {creatorApprovals['amira'] === 'approved' ? (
+                          <span className="pill l">Approved</span>
+                        ) : creatorApprovals['amira'] === 'declined' ? (
+                          <span className="pill">Declined</span>
+                        ) : (
+                          <>
+                            <div
+                              className="btn sm"
+                              onClick={() =>
+                                setCreatorApprovals(p => ({ ...p, amira: 'declined' }))
+                              }
+                            >
+                              Decline
+                            </div>
+                            <div
+                              className="btn wb sm"
+                              onClick={() =>
+                                setCreatorApprovals(p => ({ ...p, amira: 'approved' }))
+                              }
+                            >
+                              Approve
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Dawit Bekele */}
+                    <div className="lr">
+                      <span className="av" style={{ width: 38, height: 38, background: '#b9d7ff' }}>
+                        <b />
+                        <b />
+                      </span>
+                      <div>
+                        <div className="ln">Dawit Bekele</div>
+                        <div className="lm">Requested Tidal · 5h ago</div>
+                      </div>
+                      <div className="lx">
+                        {creatorApprovals['dawit'] === 'approved' ? (
+                          <span className="pill l">Approved</span>
+                        ) : creatorApprovals['dawit'] === 'declined' ? (
+                          <span className="pill">Declined</span>
+                        ) : (
+                          <>
+                            <div
+                              className="btn sm"
+                              onClick={() =>
+                                setCreatorApprovals(p => ({ ...p, dawit: 'declined' }))
+                              }
+                            >
+                              Decline
+                            </div>
+                            <div
+                              className="btn wb sm"
+                              onClick={() =>
+                                setCreatorApprovals(p => ({ ...p, dawit: 'approved' }))
+                              }
+                            >
+                              Approve
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lab" style={{ marginTop: 24 }}>
+                    Approved
+                  </div>
+                  <div className="card" style={{ marginTop: 10, overflow: 'hidden' }}>
+                    <div className="lr">
+                      <span className="av" style={{ width: 38, height: 38, background: '#9be3c6' }}>
+                        <b />
+                        <b />
+                      </span>
+                      <div>
+                        <div className="ln">Selam Tesfaye</div>
+                        <div className="lm">9 paying subscribers · $45.00 earned</div>
+                      </div>
+                      <div className="lx">
+                        <span className="pill l">Active</span>
+                      </div>
+                    </div>
+                    <div className="lr">
+                      <span className="av" style={{ width: 38, height: 38, background: '#ffd9a8' }}>
+                        <b />
+                        <b />
+                      </span>
+                      <div>
+                        <div className="ln">Yonas Girma</div>
+                        <div className="lm">6 paying subscribers · $30.00 earned</div>
+                      </div>
+                      <div className="lx">
+                        <span className="pill l">Active</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB p: Payment */}
+              {ptab === 'p' && (
+                <div className="pn" data-p="p">
+                  <div className="h2">Funding</div>
+                  <div
+                    className="card"
+                    style={{ marginTop: 18, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div id="fu1" style={{ fontSize: 18, lineHeight: '24px', fontWeight: 600 }}>
+                        {campaignState.fund
+                          ? 'Wallet funded · $2,000.00'
+                          : 'Add funds to your wallet'}
+                      </div>
+                      <div
+                        id="fu2"
+                        style={{ marginTop: 4, fontSize: 15, lineHeight: '22px', color: '#a6a6aa' }}
+                      >
+                        Creators are paid from this wallet. Funds are reserved as soon as an earning
+                        is created.
+                      </div>
+                    </div>
+                    <div
+                      className="btn wb"
+                      id="fub"
+                      style={{ height: 42, fontSize: 16, padding: '0 20px' }}
+                      onClick={() => {
+                        setCampaignState(prev => ({ ...prev, fund: true }));
+                        showToast('Wallet funded');
+                      }}
+                    >
+                      {campaignState.fund ? 'Add more' : 'Add funds'}
+                    </div>
+                  </div>
+
+                  <div className="dv" />
+                  <div className="h2" style={{ marginTop: 32 }}>
+                    Payment Methods
+                  </div>
+                  <div className="sub" style={{ marginTop: 4 }}>
+                    Choose accepted payment methods for deposits.
+                  </div>
+
+                  <div className="card" style={{ marginTop: 20, overflow: 'hidden' }}>
+                    <div className="rw">
+                      <div>
+                        <div className="a1">Cards</div>
+                        <div className="a2">
+                          Major credit and debit cards, Apple Pay and Google Pay are always accepted.
+                        </div>
+                      </div>
+                      <span className="pill l">On</span>
+                    </div>
+                    <div className="rw">
+                      <div>
+                        <div className="a1">Bank debit</div>
+                        <div className="a2">For large deposits. Settles over a few days.</div>
+                      </div>
+                      <span
+                        className="tg"
+                        onClick={e => e.currentTarget.classList.toggle('on')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="lab" style={{ marginTop: 26 }}>
+                    Regional Payment Methods
+                  </div>
+                  <div className="grid" id="rg" style={{ marginTop: 14 }}>
+                    {REGIONAL_PAYMENTS.map(n => (
+                      <div key={n} className="cell">
+                        <span className="chip">{n.slice(0, 3).toUpperCase()}</span>
+                        {n}
+                        <span
+                          className="tg"
+                          onClick={e => e.currentTarget.classList.toggle('on')}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB i: Insights (Insights bug fixed - empty graph when !isLive) */}
+              {ptab === 'i' && (
+                <div className="pn" data-p="i">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, height: 48 }}>
+                    <div
+                      className="tl"
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 10,
+                        background: '#e4d8ff',
+                        fontSize: 22,
+                      }}
+                    >
+                      <i className="ti ti-aperture" />
+                    </div>
+                    <div id="inm" style={{ fontSize: 22, fontWeight: 600 }}>
+                      {campaignState.nm}
+                    </div>
+                    <span className="pill l" id="ist">
+                      {isLive ? 'Live' : 'Setting up'}
+                    </span>
+                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                      <span className="btn sm">Edit</span>
+                      <span className="btn sm">Pause</span>
+                    </span>
+                  </div>
+
+                  {/* Setup Banner */}
+                  <div
+                    id="isc"
+                    style={{
+                      marginTop: 18,
+                      borderRadius: 'var(--radius-card)',
+                      background: '#C9B8FF',
+                      color: '#17141f',
+                      padding: '16px 18px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <div>
+                        <div id="sct" style={{ fontSize: 18, lineHeight: '24px', fontWeight: 600 }}>
+                          {isLive ? 'Your campaign is live' : 'Finish setting up'}
+                        </div>
+                        <div
+                          id="scd"
+                          style={{ fontSize: 14.5, lineHeight: '20px', color: '#3a3158' }}
+                        >
+                          {isLive
+                            ? 'Creators can now claim links and codes and start earning.'
+                            : 'Creators can’t earn until Apple purchases can be verified and your wallet is funded.'}
+                        </div>
+                      </div>
+
+                      {!isLive && firstIncomplete > 0 && (
+                        <span
+                          id="sb"
+                          className="btn bk sm"
+                          style={{ height: 36 }}
+                          onClick={() => {
+                            if (firstIncomplete === 1) navigateTo('dev', 'asc');
+                            else if (firstIncomplete === 2) navigateTo('dev', 'sdk');
+                            else if (firstIncomplete === 3) setPtab('p');
+                          }}
+                        >
+                          {setupSteps[firstIncomplete].action}
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      id="sl"
+                      style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}
+                    >
+                      {setupSteps.map((step, idx) => {
+                        const done = idx === 0 || step.done;
+                        const isCurrent = idx === firstIncomplete;
+                        return (
+                          <span
+                            key={step.label}
+                            className={`stp ${done ? 'd' : ''} ${isCurrent ? 'c' : ''}`}
+                          >
+                            <span className="sn">
+                              {done ? (
+                                <i className="ti ti-check" style={{ fontSize: 11 }} />
+                              ) : (
+                                idx + 1
+                              )}
+                            </span>
+                            {step.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 4 Stat Boxes */}
+                  <div style={{ display: 'flex', marginTop: 26, height: 96 }} id="ist4">
+                    {isLive ? (
+                      <>
+                        <div className="stat">
+                          <div className="a1">
+                            <i className="ti ti-chart-bar" style={{ fontSize: 16 }} />
+                            Attributed revenue
+                          </div>
+                          <div className="a2">$4,820.00</div>
+                          <div className="a3">$612.00 last week</div>
+                        </div>
+                        <div className="stat">
+                          <div className="a1">
+                            <i className="ti ti-users" style={{ fontSize: 16 }} />
+                            Paying subscribers
+                          </div>
+                          <div className="a2">214</div>
+                          <div className="a3">31 last week</div>
+                        </div>
+                        <div className="stat">
+                          <div className="a1">
+                            <i className="ti ti-percentage" style={{ fontSize: 16 }} />
+                            Creator earnings
+                          </div>
+                          <div className="a2">$819.40</div>
+                          <div className="a3">20% share · $81.94 fee</div>
+                        </div>
+                        <div className="stat">
+                          <div className="a1">
+                            <i className="ti ti-wallet" style={{ fontSize: 16 }} />
+                            Wallet balance
+                          </div>
+                          <div className="a2">$1,098.66</div>
+                          <div className="a3">$196.60 reserved</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="stat">
+                          <div className="a1">
+                            <i className="ti ti-chart-bar" style={{ fontSize: 16 }} />
+                            Attributed revenue
+                          </div>
+                          <div className="a2" style={{ color: '#6f6f74' }}>
+                            $0.00
+                          </div>
+                          <div className="a3">—</div>
+                        </div>
+                        <div className="stat">
+                          <div className="a1">
+                            <i className="ti ti-users" style={{ fontSize: 16 }} />
+                            Paying subscribers
+                          </div>
+                          <div className="a2" style={{ color: '#6f6f74' }}>
+                            0
+                          </div>
+                          <div className="a3">—</div>
+                        </div>
+                        <div className="stat">
+                          <div className="a1">
+                            <i className="ti ti-percentage" style={{ fontSize: 16 }} />
+                            Creator earnings
+                          </div>
+                          <div className="a2" style={{ color: '#6f6f74' }}>
+                            $0.00
+                          </div>
+                          <div className="a3">20% share</div>
+                        </div>
+                        <div className="stat">
+                          <div className="a1">
+                            <i className="ti ti-wallet" style={{ fontSize: 16 }} />
+                            Wallet balance
+                          </div>
+                          <div
+                            className="a2"
+                            style={{ color: !campaignState.fund ? '#6f6f74' : undefined }}
+                          >
+                            {campaignState.fund ? '$2,000.00' : '$0.00'}
+                          </div>
+                          <div className="a3">
+                            {campaignState.fund ? '$0.00 reserved' : 'Not funded'}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="info">
+                    <i className="ti ti-info-circle" style={{ fontSize: 16 }} />
+                    Creators earn only from verified subscription payments, never from installs or
+                    clicks.
+                  </div>
+                  <div className="dv" />
+
+                  <div
+                    style={{
+                      marginTop: 28,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      height: 38,
+                    }}
+                  >
+                    <div className="h2">Performance</div>
+                    <SvgChart
+                      config={insightChartConfig}
+                      currentKey={insightMetric}
+                      onSelectKey={setInsightMetric}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* TAB s: Settings */}
+              {ptab === 's' && (
+                <div className="pn" data-p="s">
+                  <div className="st">
+                    <div className="sn2" id="sn">
+                      <div
+                        className={snTab === 'd' ? 'a' : ''}
+                        onClick={() => setSnTab('d')}
+                      >
+                        <i className="ti ti-adjustments-horizontal" />
+                        Defaults
+                      </div>
+                      <div
+                        className={snTab === 'v' ? 'a' : ''}
+                        onClick={() => setSnTab('v')}
+                      >
+                        <i className="ti ti-code" />
+                        Developer
+                      </div>
+                      <div
+                        className={snTab === 'b' ? 'a' : ''}
+                        onClick={() => setSnTab('b')}
+                      >
+                        <i className="ti ti-heart" />
+                        Billing
+                      </div>
+                    </div>
+
+                    <div className="sp">
+                      {snTab === 'd' && (
+                        <div className="spn" data-p="d">
+                          <div className="h2">Campaign Defaults</div>
+                          <div className="sub" style={{ marginTop: 4 }}>
+                            Default settings for new campaigns.
+                          </div>
+                          <div className="card" style={{ marginTop: 20, overflow: 'hidden' }}>
+                            <div className="rw">
+                              <div>
+                                <div className="a1">Revenue share</div>
+                                <div className="a2">
+                                  Share of subscription revenue paid to creators.
+                                </div>
+                              </div>
+                              <span className="btn sm" style={{ width: 84, padding: 0 }}>
+                                20%
+                              </span>
+                            </div>
+                            <div className="rw">
+                              <div>
+                                <div className="a1">Paid renewals</div>
+                                <div className="a2">
+                                  Months of renewals that earn creators a share.
+                                </div>
+                              </div>
+                              <span className="btn sm" style={{ width: 84, padding: 0 }}>
+                                6 months
+                              </span>
+                            </div>
+                            <div className="rw">
+                              <div>
+                                <div className="a1">Auto-approve Creators</div>
+                                <div className="a2">Approve creator requests without review.</div>
+                              </div>
+                              <span
+                                className="tg"
+                                onClick={e => e.currentTarget.classList.toggle('on')}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {snTab === 'v' && (
+                        <div className="spn" data-p="v">
+                          <div className="h2">Developer</div>
+                          <div className="sub" style={{ marginTop: 4 }}>
+                            App key, App Store connection and SDK.
+                          </div>
+                          <div
+                            className="card"
+                            style={{
+                              marginTop: 20,
+                              padding: 20,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 14,
+                            }}
+                          >
+                            <i className="ti ti-code" style={{ fontSize: 30, color: '#5d5d62' }} />
+                            <div style={{ flex: 1 }}>
+                              <div className="a1" style={{ fontSize: 17, fontWeight: 500 }}>
+                                Developer console
+                              </div>
+                              <div style={{ fontSize: 14.5, color: '#9a9a9f' }}>
+                                Connect App Store Connect and install the SDK.
+                              </div>
+                            </div>
+                            <span
+                              className="btn wb sm"
+                              style={{ height: 38 }}
+                              onClick={() => navigateTo('dev', 'asc')}
+                            >
+                              Open
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {snTab === 'b' && (
+                        <div className="spn" data-p="b">
+                          <div className="card" style={{ padding: 22 }}>
+                            <div style={{ fontSize: 15, color: '#a6a6aa' }}>Upgrade to</div>
+                            <div style={{ fontSize: 22, fontWeight: 500, color: '#C9B8FF' }}>
+                              umi Pro
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 52,
+                                lineHeight: '64px',
+                                fontWeight: 500,
+                                letterSpacing: -1,
+                                marginTop: 4,
+                              }}
+                            >
+                              $69
+                              <span
+                                style={{
+                                  fontSize: 16,
+                                  color: '#a6a6aa',
+                                  fontWeight: 400,
+                                  marginLeft: 10,
+                                }}
+                              >
+                                Per month
+                              </span>
+                            </div>
+                            <div
+                              className="btn pr"
+                              style={{ marginTop: 16, width: '100%', height: 42, fontSize: 16 }}
+                              onClick={() => showToast('Upgraded to umi Pro')}
+                            >
+                              Upgrade to umi Pro
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ================= SECTION B: LUMA FULL-SCREEN PAGES (No sidebar, centered 929 CSS px) ================= */}
+
+        {/* ---------------- SCREEN 5: CAMPAIGN DETAIL (camp) ---------------- */}
+        <div className={`scr ${cur === 'camp' ? 'on' : ''}`} id="camp">
+          {/* Mobile Top bar with back arrow */}
+          {isMobile ? (
+            <div className="mobile-topbar">
+              <i className="ti ti-arrow-left" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => navigateTo('disc')} />
+              <span style={{ fontSize: 17, fontWeight: 600 }}>Palazzo Lens</span>
+            </div>
+          ) : null}
+
+          <div
+            className="mobile-content"
+            style={{
+              maxWidth: 929, // 1161 ÷ 1.25 = 929 CSS px
+              margin: '0 auto',
+              padding: isMobile ? '16px 16px 90px' : '29px 0 100px', // Top spacing: 29 CSS px
+            }}
+          >
+            {!isMobile && (
+              <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18 }}>
+                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+                Back
+              </div>
+            )}
+
+            {/* Columns: 330 CSS px (413 ÷ 1.25) + 32 CSS px gap + 566 CSS px (708 ÷ 1.25) */}
+            <div className="mobile-col" style={{ display: 'flex', gap: 32 }}>
+              <div
+                className="mobile-full"
+                style={{ width: isMobile ? '100%' : 330, flexShrink: 0 }}
+              >
+                <div
+                  className="tl mobile-cover"
+                  style={{
+                    width: isMobile ? '100%' : 330,
+                    height: isMobile ? 330 : 330,
+                    borderRadius: 18,
+                    background: '#e4d8ff',
+                    border: '1px solid #2a2a2e',
+                    fontSize: 130,
+                  }}
+                >
+                  <i className="ti ti-aperture" />
+                </div>
+
+                <div style={{ marginTop: 32, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span
+                    className="av"
+                    style={{ width: 34, height: 34, background: '#f4c4d8' }}
+                  >
+                    <b />
+                    <b />
+                  </span>
+                  <div>
+                    <div style={{ fontSize: 13.5, lineHeight: '16px', color: '#8d8d92' }}>
+                      Presented by
+                    </div>
+                    <div className="t1" style={{ fontSize: 16 }}>Maya Chen</div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 12,
+                    fontSize: 15,
+                    lineHeight: '22px',
+                    color: '#9a9a9f',
+                  }}
+                >
+                  Photo editing tools for creators, built in Addis Ababa.
+                </div>
+
+                <div className="lb" style={{ marginTop: 26 }}>
+                  Founder
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    height: 44,
+                    marginTop: 10,
+                  }}
+                >
+                  <span
+                    className="av"
+                    style={{ width: 28, height: 28, background: '#f4c4d8', gap: 3 }}
+                  >
+                    <b style={{ width: 4, height: 8 }} />
+                    <b style={{ width: 4, height: 8 }} />
+                  </span>
+                  <span className="t1" style={{ fontSize: 15 }}>Maya Chen</span>
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      display: 'flex',
+                      gap: 12,
+                      fontSize: 18,
+                      color: '#8d8d92',
+                    }}
+                  >
+                    <i className="ti ti-brand-instagram" />
+                    <i className="ti ti-brand-x" />
+                  </span>
+                </div>
+              </div>
+
+              <div className="mobile-full" style={{ width: isMobile ? '100%' : 566, flexShrink: 0 }}>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    height: 30,
+                    padding: '0 10px 0 6px',
+                    borderRadius: 8,
+                    border: '1px solid #242427',
+                    fontSize: 14,
+                    color: '#8d8d92',
+                  }}
+                >
+                  <i className="ti ti-apps" style={{ fontSize: 16, color: '#d8d8dc' }} />
+                  Featured in <span style={{ color: '#fff', fontWeight: 500 }}>Photo and video</span>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    fontSize: isMobile ? 32 : 44,
+                    lineHeight: isMobile ? '38px' : '54px',
+                    fontWeight: 600,
+                    letterSpacing: -0.8,
+                  }}
+                >
+                  Palazzo Lens
+                </div>
+
+                <div style={{ marginTop: 16 }} className="row2">
+                  <div className="tile">
+                    <i className="ti ti-percentage" />
+                  </div>
+                  <div>
+                    <div className="t1">20% of subscription revenue</div>
+                    <div className="t2">First payment plus 6 months of renewals</div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 18 }} className="row2">
+                  <div className="tile">
+                    <i className="ti ti-calendar" />
+                  </div>
+                  <div>
+                    <div className="t1">Oct 27 – Nov 27</div>
+                    <div className="t2">Ends in 31 days</div>
+                  </div>
+                </div>
+
+                {/* Join Purple Card */}
+                <div
+                  style={{
+                    marginTop: 26,
+                    borderRadius: 'var(--radius-card)',
+                    overflow: 'hidden',
+                    background: '#C9B8FF',
+                    color: '#17141f',
+                  }}
+                >
+                  <div
+                    style={{
+                      height: 38,
+                      background: '#b9a5f2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 18px',
+                      fontSize: 15,
+                      fontWeight: 500,
+                      color: '#3a3158',
+                    }}
+                  >
+                    Join
+                  </div>
+                  <div style={{ padding: '18px' }}>
+                    <div id="jt" style={{ fontSize: 20, lineHeight: '26px', fontWeight: 600 }}>
+                      {joinRequested ? 'Request sent' : 'Request to join'}
+                    </div>
+                    <div
+                      id="jd"
+                      style={{ marginTop: 4, fontSize: 14.5, lineHeight: '22px', color: '#3a3158' }}
+                    >
+                      {joinRequested
+                        ? 'Waiting for the founder to approve you. We’ll notify you when it’s done.'
+                        : 'The founder approves each creator. Once approved, you claim your own link, QR code and creator code and earn 20% of every subscription payment.'}
+                    </div>
+                    <div
+                      id="jb"
+                      className="btn bk"
+                      style={{ marginTop: 16, width: '100%', height: 42, fontSize: 16 }}
+                      onClick={() => setJoinRequested(!joinRequested)}
+                    >
+                      {joinRequested ? 'Requested' : 'Request to join'}
+                    </div>
+                    {joinRequested && (
+                      <div
+                        id="ja"
+                        style={{
+                          marginTop: 10,
+                          textAlign: 'center',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                        }}
+                        onClick={() => navigateTo('join')}
+                      >
+                        Preview as approved
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="lb" style={{ marginTop: 34 }}>
+                  About Campaign
+                </div>
+                <div
+                  style={{
+                    marginTop: 16,
+                    fontSize: 16,
+                    lineHeight: '25px',
+                    color: '#e4e4e6',
+                  }}
+                >
+                  Palazzo Lens turns ordinary shots into polished portraits in seconds. Creators
+                  earn a share of every subscription they bring in, with no minimum audience and no
+                  exclusivity.
+                </div>
+
+                <div className="lb" style={{ marginTop: 28 }}>
+                  Get the app
+                </div>
+                <div className="sr2">
+                  <div className="stt">
+                    <i className="ti ti-brand-apple" />
+                  </div>
+                  <div className="t1">App Store</div>
+                  <i
+                    className="ti ti-arrow-up-right"
+                    style={{ marginLeft: 'auto', fontSize: 18, color: '#8d8d92' }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------- SCREEN 6: CREATOR CLAIM & ANALYTICS (join) ---------------- */}
+        <div className={`scr ${cur === 'join' ? 'on' : ''}`} id="join">
+          {/* Mobile Top bar */}
+          {isMobile ? (
+            <div className="mobile-topbar">
+              <i className="ti ti-arrow-left" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => navigateTo('disc')} />
+              <span style={{ fontSize: 17, fontWeight: 600 }}>Your link and code</span>
+            </div>
+          ) : null}
+
+          <div
+            className="mobile-content"
+            style={{
+              maxWidth: 656, // 820 ÷ 1.25 = 656 CSS px centered
+              margin: '0 auto',
+              padding: isMobile ? '16px 16px 90px' : '29px 0 90px',
+            }}
+          >
+            {!isMobile && (
+              <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18 }}>
+                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+                Back to campaigns
+              </div>
+            )}
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                height: 60,
+              }}
+            >
+              <div
+                className="tl"
+                style={{
+                  width: 58,
+                  height: 58,
+                  borderRadius: 14,
+                  background: '#e4d8ff',
+                  fontSize: 32,
+                }}
+              >
+                <i className="ti ti-aperture" />
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontSize: 27,
+                    lineHeight: '34px',
+                    fontWeight: 600,
+                    letterSpacing: -0.4,
+                  }}
+                >
+                  Palazzo Lens
+                </div>
+                <div style={{ fontSize: 15, color: '#9a9a9f', lineHeight: '22px' }}>
+                  20% of subscription revenue · by Maya Chen
+                </div>
+              </div>
+              <span className="pill l" style={{ marginLeft: 'auto' }}>
+                Approved
+              </span>
+            </div>
+
+            <div style={{ marginTop: 36 }}>
+              <div className="h2">Your link and code</div>
+              <div className="sub" style={{ marginTop: 2 }}>
+                Claim your personal link, QR code and creator code.
+              </div>
+            </div>
+
+            {/* Expandable Link/Code Box */}
+            <div className="xp" id="xp" style={{ height: codeClaimed ? 'auto' : 58 }}>
+              {!codeClaimed ? (
+                <div className="cbtn" id="cb" onClick={handleClaimCode}>
+                  {claimingLoading ? 'Claiming…' : 'Claim code'}
+                </div>
+              ) : (
+                <div className="inn" id="inn" style={{ flexDirection: isMobile ? 'column' : 'row' }}>
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 22,
+                        lineHeight: '28px',
+                        fontWeight: 700,
+                        letterSpacing: -0.4,
+                      }}
+                    >
+                      Your referral link
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 14.5,
+                        lineHeight: '22px',
+                        color: '#a6a6aa',
+                      }}
+                    >
+                      Everyone who subscribes through your link or code earns you a share, every
+                      payment.
+                    </div>
+
+                    <div className="rwr">
+                      <div className="ipt">{claimData?.link}</div>
+                      <div
+                        id="p1"
+                        className="cpb"
+                        onClick={() => {
+                          if (claimData?.link) {
+                            navigator.clipboard?.writeText(`https://${claimData.link}`);
+                          }
+                          setCopiedLink(true);
+                          setTimeout(() => setCopiedLink(false), 1400);
+                        }}
+                      >
+                        <i className={`ti ${copiedLink ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: 16 }} />
+                        {copiedLink ? 'Copied' : 'Copy link'}
+                      </div>
+                    </div>
+
+                    <div className="rwr">
+                      <div className="ipt" style={{ fontFamily: 'var(--font-mono)' }}>
+                        {claimData?.code}
+                      </div>
+                      <div
+                        id="p2"
+                        className="cpb"
+                        onClick={() => {
+                          if (claimData?.code) {
+                            navigator.clipboard?.writeText(claimData.code);
+                          }
+                          setCopiedCode(true);
+                          setTimeout(() => setCopiedCode(false), 1400);
+                        }}
+                      >
+                        <i className={`ti ${copiedCode ? 'ti-check' : 'ti-copy'}`} style={{ fontSize: 16 }} />
+                        {copiedCode ? 'Copied' : 'Copy code'}
+                      </div>
+                    </div>
+
+                    <div className="fx">
+                      <div>
+                        <b>20%</b>
+                        <span>Revenue share</span>
+                      </div>
+                      <div>
+                        <b>6 mo</b>
+                        <span>Of renewals</span>
+                      </div>
+                      <div>
+                        <b>30 days</b>
+                        <span>Refund hold</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="qc">
+                    <div style={{ fontSize: 13.5, color: '#a6a6aa' }}>Scan with your phone</div>
+                    <div className="qf">
+                      <i className="cn a" />
+                      <i className="cn b" />
+                      <i className="cn c" />
+                      <i className="cn d" />
+                      <div className="qb">{claimData && renderQrSvg(claimData.seed, 120)}</div>
+                    </div>
+                    <div
+                      className="btn sm"
+                      style={{ marginTop: 12, height: 36 }}
+                      onClick={() => showToast('QR code saved')}
+                    >
+                      <i className="ti ti-download" style={{ fontSize: 15 }} />
+                      Download PNG
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 11.5, color: '#6f6f74' }}>
+                      Preview only
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="dv" style={{ marginTop: 36 }} />
+
+            <div
+              style={{
+                marginTop: 28,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                height: 38,
+              }}
+            >
+              <div className="h2">Analytics</div>
+              <SvgChart
+                config={joinChartConfig}
+                currentKey={joinMetric}
+                onSelectKey={setJoinMetric}
+              />
+            </div>
+
+            {/* 4 Analytics Stat Tiles */}
+            <div style={{ display: 'flex', marginTop: 20, height: 86 }} id="js4">
+              <div className="stat">
+                <div className="a1">Link clicks</div>
+                <div
+                  className="a2"
+                  style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
+                >
+                  {codeClaimed ? '214' : '0'}
+                </div>
+                <div className="a3">{codeClaimed ? '31 last week' : '—'}</div>
+              </div>
+              <div className="stat">
+                <div className="a1">Referred users</div>
+                <div
+                  className="a2"
+                  style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
+                >
+                  {codeClaimed ? '63' : '0'}
+                </div>
+                <div className="a3">{codeClaimed ? '9 last week' : '—'}</div>
+              </div>
+              <div className="stat">
+                <div className="a1">Paying subscribers</div>
+                <div
+                  className="a2"
+                  style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
+                >
+                  {codeClaimed ? '18' : '0'}
+                </div>
+                <div className="a3">{codeClaimed ? '3 last week' : '—'}</div>
+              </div>
+              <div className="stat">
+                <div className="a1">Earned</div>
+                <div
+                  className="a2"
+                  style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
+                >
+                  {codeClaimed ? '$90.00' : '$0.00'}
+                </div>
+                <div className="a3">{codeClaimed ? '20% of revenue' : '—'}</div>
+              </div>
+            </div>
+
+            {/* How people found you */}
+            <div style={{ marginTop: 28 }}>
+              <div style={{ fontSize: 18, fontWeight: 600 }}>How people found you</div>
+              <div style={{ marginTop: 12 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    height: 54,
+                    borderTop: '1px solid #1f1f22',
+                  }}
+                >
+                  <i className="ti ti-link" style={{ fontSize: 18, color: '#bdbdc1' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15 }}>
+                      <span>Link or QR code</span>
+                      <span id="sl1" style={{ color: '#a6a6aa' }}>
+                        {codeClaimed ? '47 people · 75%' : '0 people'}
+                      </span>
+                    </div>
+                    <div className="bar">
+                      <i id="bl1" style={{ width: codeClaimed ? '75%' : '0%' }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    height: 54,
+                    borderTop: '1px solid #1f1f22',
+                  }}
+                >
+                  <i className="ti ti-keyboard" style={{ fontSize: 18, color: '#bdbdc1' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15 }}>
+                      <span>Creator code typed in the app</span>
+                      <span id="sl2" style={{ color: '#a6a6aa' }}>
+                        {codeClaimed ? '16 people · 25%' : '0 people'}
+                      </span>
+                    </div>
+                    <div className="bar">
+                      <i id="bl2" style={{ width: codeClaimed ? '25%' : '0%' }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------- SCREEN 7: CREATE CAMPAIGN (new) ---------------- */}
+        <div className={`scr ${cur === 'new' ? 'on' : ''}`} id="new">
+          {/* Mobile Top bar */}
+          {isMobile ? (
+            <div className="mobile-topbar">
+              <i className="ti ti-arrow-left" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => navigateTo('disc')} />
+              <span style={{ fontSize: 17, fontWeight: 600 }}>New Campaign</span>
+            </div>
+          ) : null}
+
+          <div
+            className="mobile-content"
+            style={{
+              maxWidth: 929, // 1161 ÷ 1.25 = 929 CSS px
+              margin: '0 auto',
+              padding: isMobile ? '16px 16px 90px' : '29px 0 100px',
+            }}
+          >
+            {!isMobile && (
+              <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18 }}>
+                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+                Cancel
+              </div>
+            )}
+
+            {/* 330 CSS px cover (radius 18) + 32 gap + 566 CSS px form */}
+            <div className="mobile-col" style={{ display: 'flex', gap: 32 }}>
+              <div style={{ width: isMobile ? '100%' : 330, flexShrink: 0 }}>
+                <div
+                  className="tl mobile-cover"
+                  style={{
+                    position: 'relative',
+                    width: isMobile ? '100%' : 330,
+                    height: isMobile ? 330 : 330, // cover is 330x330, radius 18
+                    borderRadius: 18,
+                    border: '1px solid #2a2a2e',
+                    background: '#141416',
+                    color: '#5d5d62',
+                    fontSize: 52,
+                  }}
+                >
+                  <i className="ti ti-photo" />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 18,
+                      bottom: 18,
+                      width: 36,
+                      height: 36,
+                      borderRadius: '50%',
+                      background: '#fff',
+                      color: '#0a0a0a',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <i className="ti ti-photo-up" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mobile-full" style={{ width: isMobile ? '100%' : 566, flexShrink: 0, position: 'relative' }}>
+                <input
+                  id="nm"
+                  placeholder="Campaign Name"
+                  value={newCampName}
+                  onChange={e => setNewCampName(e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    height: 52,
+                    border: 0,
+                    background: 'transparent',
+                    boxShadow: 'none',
+                    outline: 0,
+                    padding: 0,
+                    fontFamily: "'Roboto Slab', serif",
+                    fontWeight: 600,
+                    fontSize: isMobile ? 32 : 42,
+                    color: '#fff',
+                  }}
+                />
+
+                <div className="mobile-col" style={{ marginTop: 24, display: 'flex', gap: 14 }}>
+                  <div
+                    className="box"
+                    style={{
+                      flex: 1,
+                      height: 96,
+                      padding: '0 10px 0 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 50,
+                        fontSize: 16,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 24,
+                      }}
+                    >
+                      <span>Start</span>
+                      <span>End</span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginLeft: 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <div
+                          className="btn dp sm"
+                          style={{ minWidth: 120 }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            setDatePickerTarget(datePickerTarget === 's' ? null : 's');
+                          }}
+                        >
+                          {startDateStr}
+                        </div>
+                        <div
+                          className="btn tp sm"
+                          style={{ minWidth: 90 }}
+                          onClick={() => {
+                            const times = ['10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM'];
+                            const idx = times.indexOf(startTimeStr);
+                            setStartTimeStr(times[(idx + 1) % times.length]);
+                          }}
+                        >
+                          {startTimeStr}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <div
+                          className="btn dp sm"
+                          style={{ minWidth: 120 }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            setDatePickerTarget(datePickerTarget === 'e' ? null : 'e');
+                          }}
+                        >
+                          {endDateStr}
+                        </div>
+                        <div
+                          className="btn tp sm"
+                          style={{ minWidth: 90 }}
+                          onClick={() => {
+                            const times = ['10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM'];
+                            const idx = times.indexOf(endTimeStr);
+                            setEndTimeStr(times[(idx + 1) % times.length]);
+                          }}
+                        >
+                          {endTimeStr}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="box"
+                    style={{ width: isMobile ? '100%' : 140, height: 96, padding: '12px 14px' }}
+                  >
+                    <i className="ti ti-world" style={{ fontSize: 18, color: '#bdbdc1' }} />
+                    <div style={{ marginTop: 4, fontSize: 15, fontWeight: 500 }}>
+                      GMT+03:00
+                    </div>
+                    <div style={{ fontSize: 13.5, color: '#9a9a9f' }}>Addis Ababa</div>
+                  </div>
+                </div>
+
+                {/* Date picker popup */}
+                {datePickerTarget && (
+                  <div
+                    id="cpp"
+                    className="pop on"
+                    style={{
+                      left: 100,
+                      top: 110,
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: 16,
+                        fontWeight: 500,
+                        marginBottom: 8,
+                        padding: '0 4px',
+                      }}
+                    >
+                      October 2026
+                    </div>
+                    <div className="g">
+                      {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                        <span key={d} style={{ color: '#7d7d82', fontSize: 12, cursor: 'default' }}>
+                          {d}
+                        </span>
+                      ))}
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                        <span
+                          key={d}
+                          className={d === 27 ? 'on' : ''}
+                          onClick={() => {
+                            const formatted = `${WEEKDAYS[(d + 3) % 7]}, Oct ${d}`;
+                            if (datePickerTarget === 's') setStartDateStr(formatted);
+                            else setEndDateStr(formatted);
+                            setDatePickerTarget(null);
+                          }}
+                        >
+                          {d}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div
+                  className="box"
+                  style={{
+                    marginTop: 18,
+                    height: 60,
+                    padding: '0 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <i className="ti ti-link" style={{ fontSize: 18, color: '#bdbdc1' }} />
+                  <div>
+                    <div style={{ fontSize: 16, lineHeight: '22px', fontWeight: 500 }}>
+                      Add App Link
+                    </div>
+                    <div style={{ fontSize: 14, color: '#9a9a9f' }}>App Store link</div>
+                  </div>
+                </div>
+
+                <div
+                  className="box"
+                  style={{
+                    marginTop: 16,
+                    height: 42,
+                    padding: '0 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    fontSize: 16,
+                    fontWeight: 500,
+                  }}
+                >
+                  <i className="ti ti-align-left" style={{ fontSize: 18, color: '#bdbdc1' }} />
+                  Add Description
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 26,
+                    fontSize: 15,
+                    fontWeight: 500,
+                    color: '#9a9a9f',
+                  }}
+                >
+                  Campaign Options
+                </div>
+
+                <div className="box" style={{ marginTop: 10, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      height: 44,
+                      padding: '0 16px',
+                      fontSize: 16,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <i className="ti ti-percentage" style={{ fontSize: 18, color: '#bdbdc1' }} />
+                    Revenue share
+                    <span style={{ marginLeft: 'auto', color: '#a6a6aa' }}>20%</span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      height: 44,
+                      padding: '0 16px',
+                      borderTop: '1px solid #242427',
+                      fontSize: 16,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <i className="ti ti-repeat" style={{ fontSize: 18, color: '#bdbdc1' }} />
+                    Paid renewals
+                    <span style={{ marginLeft: 'auto', color: '#a6a6aa' }}>6 months</span>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      height: 44,
+                      padding: '0 16px',
+                      borderTop: '1px solid #242427',
+                      fontSize: 16,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <i className="ti ti-lock" style={{ fontSize: 18, color: '#bdbdc1' }} />
+                    Require Approval
+                    <span
+                      className="tg on"
+                      style={{ marginLeft: 'auto' }}
+                      onClick={e => e.currentTarget.classList.toggle('on')}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  id="cc"
+                  className="btn wb"
+                  style={{
+                    marginTop: 38,
+                    width: '100%',
+                    height: 48,
+                    fontSize: 18,
+                    borderRadius: 'var(--radius-btn)',
+                  }}
+                  onClick={() => {
+                    const n = newCampName.trim() || 'Untitled campaign';
+                    setCampaignState({
+                      nm: n,
+                      asc: false,
+                      sdk: false,
+                      fund: false,
+                    });
+                    navigateTo('pers', 'i');
+                    showToast('Campaign created. Finish setup to go live.');
+                  }}
+                >
+                  Create Campaign
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------- SCREEN 8: WITHDRAW (wd) ---------------- */}
+        <div className={`scr ${cur === 'wd' ? 'on' : ''}`} id="wd">
+          {/* Mobile Top bar */}
+          {isMobile ? (
+            <div className="mobile-topbar">
+              <i className="ti ti-arrow-left" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => navigateTo('earn')} />
+              <span style={{ fontSize: 17, fontWeight: 600 }}>Withdraw</span>
+            </div>
+          ) : null}
+
+          <div
+            className="mobile-content"
+            style={{
+              maxWidth: 929, // 1161 ÷ 1.25 = 929 CSS px
+              margin: '0 auto',
+              padding: isMobile ? '16px 16px 90px' : '29px 0 100px',
+            }}
+          >
+            {!isMobile && (
+              <div className="bkl" onClick={() => navigateTo('earn')} style={{ height: 32, marginBottom: 18 }}>
+                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+                Back to earnings
+              </div>
+            )}
+
+            {!withdrawDone ? (
+              <div id="f1" className="mobile-col" style={{ display: 'flex', gap: 32 }}>
+                <div style={{ width: isMobile ? '100%' : 330, flexShrink: 0 }}>
+                  <div style={{ fontSize: 27, lineHeight: '36px', fontWeight: 600 }}>
+                    Withdraw
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 16, color: '#dcdcde' }}>
+                    Send your earnings to your card.
+                  </div>
+
+                  <div style={{ marginTop: 26, fontSize: 15, color: '#9a9a9f' }}>Amount</div>
+                  <div className="am">
+                    <span style={{ fontSize: 40, fontWeight: 500, color: '#8d8d92' }}>$</span>
+                    <input
+                      id="ai"
+                      value={withdrawAmount}
+                      onChange={e => {
+                        setWithdrawAmount(e.target.value);
+                        setWithdrawError('');
+                      }}
+                    />
+                    <span
+                      className="btn sm"
+                      id="mx"
+                      onClick={() => setWithdrawAmount(bal.toFixed(2))}
+                    >
+                      Max
+                    </span>
+                  </div>
+
+                  {withdrawError && (
+                    <div id="er" style={{ display: 'block', marginTop: 8, fontSize: 14, color: '#f05252' }}>
+                      {withdrawError}
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 8, fontSize: 14, color: '#8d8d92' }}>
+                    Available <span id="av">{formatMoney(bal)}</span> · Minimum $10.00
+                  </div>
+
+                  <div style={{ marginTop: 18 }}>
+                    <div className="kv">
+                      <span>Fee</span>
+                      <span>$0.00</span>
+                    </div>
+                    <div className="kv">
+                      <span>Arrives</span>
+                      <span>2 to 3 business days</span>
+                    </div>
+                    <div className="kv">
+                      <span>You’ll receive</span>
+                      <span id="rc" style={{ fontSize: 18, fontWeight: 600 }}>
+                        {isNaN(parseFloat(withdrawAmount))
+                          ? '$0.00'
+                          : formatMoney(parseFloat(withdrawAmount))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mobile-full" style={{ width: isMobile ? '100%' : 566, flexShrink: 0 }}>
+                  <div className="h2">Pay out to</div>
+                  <div className="sub" style={{ marginTop: 2 }}>
+                    Choose a card or add a new one.
+                  </div>
+
+                  <div className="card" style={{ marginTop: 20, overflow: 'hidden' }}>
+                    <div id="cl">
+                      {cards.map(c => (
+                        <div
+                          key={c.id}
+                          className="cdr"
+                          onClick={() => setSelCard(c.id)}
+                        >
+                          <span className="cb2">{c.b}</span>
+                          <div>
+                            <div style={{ fontSize: 16, lineHeight: '22px', fontWeight: 500 }}>
+                              {c.l}
+                            </div>
+                            <div style={{ fontSize: 14, color: '#9a9a9f' }}>
+                              Expires {c.e}
+                            </div>
+                          </div>
+                          <span className={`rd ${c.id === selCard ? 'on' : ''}`} />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div
+                      className="ad"
+                      id="adb"
+                      onClick={() => setAddCardOpen(!addCardOpen)}
+                    >
+                      <i className="ti ti-plus" style={{ fontSize: 18 }} />
+                      Add a card
+                    </div>
+
+                    {/* Add Card Form */}
+                    <div className={`fm ${addCardOpen ? 'on' : ''}`} id="fm">
+                      <div className="fl" style={{ marginTop: 0 }}>
+                        Name on card
+                      </div>
+                      <input
+                        className="fi"
+                        id="fn"
+                        placeholder="Full name"
+                        value={newCardName}
+                        onChange={e => setNewCardName(e.target.value)}
+                      />
+
+                      <div className="fl">Card number</div>
+                      <input
+                        className="fi"
+                        id="fc"
+                        placeholder="1234 5678 9012 3456"
+                        inputMode="numeric"
+                        value={newCardNumber}
+                        onChange={e => {
+                          const d = e.target.value.replace(/\D/g, '').slice(0, 16);
+                          const formatted = d.replace(/(\d{4})(?=\d)/g, '$1 ');
+                          setNewCardNumber(formatted);
+                        }}
+                      />
+
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                          <div className="fl">Expiry</div>
+                          <input
+                            className="fi"
+                            id="fe"
+                            placeholder="MM/YY"
+                            value={newCardExpiry}
+                            onChange={e => {
+                              const d = e.target.value.replace(/\D/g, '').slice(0, 4);
+                              setNewCardExpiry(d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d);
+                            }}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div className="fl">CVC</div>
+                          <input
+                            className="fi"
+                            id="fv"
+                            placeholder="123"
+                            value={newCardCvc}
+                            onChange={e => setNewCardCvc(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      {addCardError && (
+                        <div
+                          id="fr"
+                          style={{
+                            display: 'block',
+                            marginTop: 8,
+                            fontSize: 14,
+                            color: '#f05252',
+                          }}
+                        >
+                          {addCardError}
+                        </div>
+                      )}
+
+                      <div style={{ marginTop: 12, fontSize: 13.5, color: '#7d7d82' }}>
+                        Card details go straight to Stripe. umi never stores them.
+                      </div>
+
+                      <div
+                        style={{
+                          marginTop: 14,
+                          display: 'flex',
+                          gap: 8,
+                          justifyContent: 'flex-end',
+                        }}
+                      >
+                        <div
+                          className="btn sm"
+                          id="fx"
+                          onClick={() => setAddCardOpen(false)}
+                        >
+                          Cancel
+                        </div>
+                        <div
+                          className="btn wb sm"
+                          id="fs"
+                          onClick={() => {
+                            const digits = newCardNumber.replace(/\D/g, '');
+                            const ex = newCardExpiry.split('/');
+                            const m = Number(ex[0]);
+                            const y = Number(ex[1]);
+
+                            if (!newCardName.trim()) {
+                              setAddCardError('Enter the name on the card.');
+                              return;
+                            }
+                            if (digits.length < 15) {
+                              setAddCardError('Enter a valid card number.');
+                              return;
+                            }
+                            if (!(m >= 1 && m <= 12) || !ex[1] || ex[1].length < 2) {
+                              setAddCardError('Enter an expiry date as MM/YY.');
+                              return;
+                            }
+                            if (y < 26 || (y === 26 && m < 10)) {
+                              setAddCardError('That card has expired.');
+                              return;
+                            }
+                            if (newCardCvc.length < 3) {
+                              setAddCardError('Enter the security code.');
+                              return;
+                            }
+
+                            const b = /^4/.test(digits)
+                              ? 'VISA'
+                              : /^(5[1-5]|2[2-7])/.test(digits)
+                              ? 'MC'
+                              : 'CARD';
+                            const label = `${
+                              b === 'VISA' ? 'Visa' : b === 'MC' ? 'Mastercard' : 'Card'
+                            } ••••${digits.slice(-4)}`;
+
+                            const newCard: Card = {
+                              id: nextCardId,
+                              b,
+                              l: label,
+                              e: newCardExpiry,
+                            };
+                            setCards(prev => [...prev, newCard]);
+                            setSelCard(nextCardId);
+                            setNextCardId(id => id + 1);
+                            setAddCardError('');
+                            setAddCardOpen(false);
+                            setNewCardName('');
+                            setNewCardNumber('');
+                            setNewCardExpiry('');
+                            setNewCardCvc('');
+                          }}
+                        >
+                          Save card
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    className="btn wb"
+                    id="go"
+                    style={{
+                      width: '100%',
+                      height: 48,
+                      marginTop: 20,
+                      fontSize: 18,
+                      borderRadius: 'var(--radius-btn)',
+                    }}
+                    onClick={() => {
+                      const a = parseFloat(withdrawAmount);
+                      if (isNaN(a)) {
+                        setWithdrawError('Enter an amount.');
+                        return;
+                      }
+                      if (a < 10) {
+                        setWithdrawError('The minimum withdrawal is $10.00.');
+                        return;
+                      }
+                      if (a > bal + 0.001) {
+                        setWithdrawError(
+                          `That’s more than your available balance of ${formatMoney(bal)}.`
+                        );
+                        return;
+                      }
+                      const c = cards.find(x => x.id === selCard);
+                      if (!c) {
+                        setWithdrawError('Add a card to withdraw to.');
+                        return;
+                      }
+
+                      setBal(Math.round((bal - a) * 100) / 100);
+                      setPaid(prev => prev + a);
+                      setWithdrawDone(true);
+                    }}
+                  >
+                    Withdraw
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div
+                id="f2"
+                style={{ display: 'flex', justifyContent: 'center', marginTop: 70 }}
+              >
+                <div style={{ width: 440, textAlign: 'center' }}>
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: '50%',
+                      background: 'rgba(201,184,255,.16)',
+                      color: '#C9B8FF',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 32,
+                    }}
+                  >
+                    <i className="ti ti-check" />
+                  </div>
+                  <div style={{ marginTop: 16, fontSize: 27, fontWeight: 600 }}>
+                    Withdrawal requested
+                  </div>
+                  <div
+                    id="d2"
+                    style={{ marginTop: 6, fontSize: 16, lineHeight: '24px', color: '#a6a6aa' }}
+                  >
+                    We’ll send {formatMoney(parseFloat(withdrawAmount))} to your{' '}
+                    {cards.find(x => x.id === selCard)?.l || 'Card'}. You’ll get a receipt by email.
+                  </div>
+                  <div
+                    className="btn wb"
+                    style={{ width: '100%', marginTop: 24, height: 42, fontSize: 16 }}
+                    onClick={() => navigateTo('earn')}
+                  >
+                    Back to earnings
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ================= SCREEN 9: DEVELOPER (dev) ================= */}
+        {/* Top bar 45 CSS px, sidebar 246 CSS px fixed, content 688 CSS px starts 292 after sidebar */}
+        <div className={`scr ${cur === 'dev' ? 'on' : ''}`} id="dev">
+          <div className="dtop">
+            <svg width="22" height="22" viewBox="0 0 30 30" fill="#C9B8FF">
+              <ellipse cx="15" cy="8" rx="4.6" ry="7" />
+              <ellipse cx="15" cy="22" rx="4.6" ry="7" />
+              <ellipse cx="8" cy="15" rx="7" ry="4.6" />
+              <ellipse cx="22" cy="15" rx="7" ry="4.6" />
+            </svg>
+            <span style={{ color: '#4a4a4f', fontSize: 18 }}>/</span>
+            <span style={{ fontSize: 16, fontWeight: 600 }}>Developer</span>
+          </div>
+
+          <div className="dsd" style={{ display: isMobile ? 'none' : 'block' }}>
+            <div
+              className="bkl"
+              style={{
+                height: 48,
+                margin: '0 -12px 18px',
+                padding: '0 16px',
+                borderBottom: '1px solid #1f1f22',
+                width: 246,
+              }}
+              onClick={() => navigateTo('pers', 'i')}
+            >
+              <i className="ti ti-arrow-left" style={{ fontSize: 16 }} />
+              Back to Personal
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 13,
+                letterSpacing: '.1em',
+                color: '#7d7d82',
+                padding: '0 6px',
+                marginBottom: 6,
+              }}
+            >
+              DEVELOPER
+            </div>
+            <div
+              className={`dsi ${devTab === 'asc' ? 'a' : ''}`}
+              onClick={() => setDevTab('asc')}
+            >
+              API Keys
+            </div>
+            <div
+              className={`dsi ${devTab === 'sdk' ? 'a' : ''}`}
+              onClick={() => setDevTab('sdk')}
+            >
+              SDK Setup
+            </div>
+          </div>
+
+          {/* Mobile Top Tabs for Developer */}
+          {isMobile && (
+            <div style={{ display: 'flex', borderBottom: '1px solid #1f1f22', background: '#0a0a0a' }}>
+              <div
+                style={{
+                  flex: 1,
+                  height: 44,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 15,
+                  fontWeight: 500,
+                  borderBottom: devTab === 'asc' ? '2px solid #fff' : '2px solid transparent',
+                  color: devTab === 'asc' ? '#fff' : '#8d8d92',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setDevTab('asc')}
+              >
+                API Keys
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  height: 44,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 15,
+                  fontWeight: 500,
+                  borderBottom: devTab === 'sdk' ? '2px solid #fff' : '2px solid transparent',
+                  color: devTab === 'sdk' ? '#fff' : '#8d8d92',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setDevTab('sdk')}
+              >
+                SDK Setup
+              </div>
+            </div>
+          )}
+
+          {/* Content: 688 CSS px, starts 292 after sidebar (246 + 46 = ~292 offset) */}
+          <div
+            className="mobile-content"
+            style={{
+              marginLeft: isMobile ? 0 : 292,
+              maxWidth: 688,
+              padding: isMobile ? '16px 16px 90px' : '36px 0 100px',
+            }}
+          >
+            {devTab === 'asc' && (
+              <div className="dp2">
+                <div style={{ fontSize: 27, lineHeight: '36px', fontWeight: 500, letterSpacing: -0.4 }}>
+                  API Keys
+                </div>
+                <div className="sub" style={{ marginTop: 4 }}>
+                  Connect your app so umi can verify subscription purchases with Apple.
+                </div>
+
+                <div className="h2" style={{ marginTop: 28, fontSize: 18 }}>
+                  Umi app key
+                </div>
+                <div style={{ marginTop: 4, fontSize: 14.5, color: '#a6a6aa' }}>
+                  Public. Safe to put in your app.
+                </div>
+                <div className="rwr">
+                  <div className="ipt" style={{ fontFamily: 'var(--font-mono)' }}>
+                    umi_app_pl_8f2kQ4mT9x
+                  </div>
+                  <div
+                    id="ck"
+                    className="btn sm"
+                    style={{ height: 44, padding: '0 16px' }}
+                    onClick={() => {
+                      navigator.clipboard?.writeText('umi_app_pl_8f2kQ4mT9x');
+                      setCopiedAppKey(true);
+                      setTimeout(() => setCopiedAppKey(false), 1400);
+                    }}
+                  >
+                    <i
+                      className={`ti ${copiedAppKey ? 'ti-check' : 'ti-copy'}`}
+                      style={{ fontSize: 16 }}
+                    />
+                    {copiedAppKey ? 'Copied' : 'Copy'}
+                  </div>
+                </div>
+
+                <div className="dv" />
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: 28,
+                  }}
+                >
+                  <div className="h2" style={{ fontSize: 18 }}>
+                    App Store Connect key
+                  </div>
+                  <span className={`pill ${campaignState.asc ? 'l' : ''}`} id="ap">
+                    {campaignState.asc ? 'Connected' : 'Not connected'}
+                  </span>
+                </div>
+                <div style={{ marginTop: 4, fontSize: 14.5, lineHeight: '22px', color: '#a6a6aa' }}>
+                  Create an In-App Purchase key in App Store Connect and enter its details. umi
+                  encrypts the private key and never shows it again.
+                </div>
+
+                {!campaignState.asc ? (
+                  <div id="af">
+                    <div className="fl">Bundle ID</div>
+                    <input
+                      className="fi"
+                      id="a1"
+                      placeholder="com.example.palazzolens"
+                      value={devBundleId}
+                      onChange={e => setDevBundleId(e.target.value)}
+                    />
+
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <div style={{ flex: 1 }}>
+                        <div className="fl">Issuer ID</div>
+                        <input
+                          className="fi"
+                          id="a2"
+                          placeholder="69a6de70-…"
+                          value={devIssuerId}
+                          onChange={e => setDevIssuerId(e.target.value)}
+                        />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div className="fl">Key ID</div>
+                        <input
+                          className="fi"
+                          id="a3"
+                          placeholder="2X9R4HXF34"
+                          value={devKeyId}
+                          onChange={e => setDevKeyId(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="fl">Private key</div>
+                    <div
+                      id="a4"
+                      className="ipt"
+                      style={{
+                        height: 52,
+                        cursor: 'pointer',
+                        borderStyle: 'dashed',
+                        color: devKeyUploaded ? '#fff' : '#9a9a9f',
+                        fontSize: 15,
+                      }}
+                      onClick={() => setDevKeyUploaded(true)}
+                    >
+                      {devKeyUploaded ? (
+                        <>
+                          <i
+                            className="ti ti-file"
+                            style={{ fontSize: 18, marginRight: 8, color: '#C9B8FF' }}
+                          />
+                          AuthKey_2X9R4HXF34.p8
+                        </>
+                      ) : (
+                        <>
+                          <i className="ti ti-upload" style={{ fontSize: 18, marginRight: 8 }} />
+                          Upload the .p8 file
+                        </>
+                      )}
+                    </div>
+
+                    {devError && (
+                      <div id="ae" style={{ display: 'block', marginTop: 8, fontSize: 14, color: '#f05252' }}>
+                        {devError}
+                      </div>
+                    )}
+
+                    <div
+                      id="ab"
+                      className="btn pr"
+                      style={{ marginTop: 18, height: 44, padding: '0 20px', fontSize: 16 }}
+                      onClick={() => {
+                        if (!devBundleId.trim() || !devIssuerId.trim() || !devKeyId.trim()) {
+                          setDevError('Fill in the bundle ID, issuer ID and key ID.');
+                          return;
+                        }
+                        if (!devKeyUploaded) {
+                          setDevError('Upload the .p8 private key.');
+                          return;
+                        }
+                        setCampaignState(prev => ({ ...prev, asc: true }));
+                        setDevError('');
+                        showToast('App Store connected');
+                      }}
+                    >
+                      Connect App Store
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    id="acd"
+                    style={{
+                      marginTop: 18,
+                      border: '1px solid #242427',
+                      borderRadius: 12,
+                      height: 64,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '0 16px',
+                    }}
+                  >
+                    <i className="ti ti-circle-check" style={{ fontSize: 22, color: '#C9B8FF' }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 16, fontWeight: 500 }}>
+                        Key {devKeyId || '2X9R4HXF34'} connected
+                      </div>
+                      <div style={{ fontSize: 14, color: '#8d8d92' }}>
+                        Private key encrypted. It won’t be shown again.
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {devTab === 'sdk' && (
+              <div className="dp2">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontSize: 27, lineHeight: '36px', fontWeight: 500, letterSpacing: -0.4 }}>
+                      SDK Setup
+                    </div>
+                    <div className="sub" style={{ marginTop: 4 }}>
+                      iOS for now. Add the SDK so referrals and purchases are verified.
+                    </div>
+                  </div>
+                  <span
+                    className={`pill ${campaignState.sdk ? 'l' : ''}`}
+                    id="sc2"
+                    style={{ marginTop: 8 }}
+                  >
+                    {campaignState.sdk ? 'Connected' : 'Not connected'}
+                  </span>
+                </div>
+
+                <div id="ss">
+                  {SDK_STEPS.map((step, idx) => (
+                    <div key={step.title} style={{ display: 'flex', gap: 14, marginTop: 28 }}>
+                      <span className="nbx">{idx + 1}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 18, fontWeight: 600 }}>{step.title}</div>
+                        <div
+                          className="cdx"
+                          dangerouslySetInnerHTML={{ __html: step.code }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: 14, marginTop: 28 }}>
+                  <span className="nbx">5</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 18, fontWeight: 600 }}>Verify the connection</div>
+                    <div style={{ marginTop: 4, fontSize: 15, color: '#a6a6aa' }}>
+                      Run your app, then send a test event from here.
+                    </div>
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span
+                        id="vb"
+                        className="btn wb sm"
+                        style={{ height: 38, padding: '0 16px', fontSize: 15 }}
+                        onClick={() => {
+                          if (devTesting) return;
+                          setDevTesting(true);
+                          setDevTestStatus('Waiting for a test event…');
+                          setTimeout(() => {
+                            setCampaignState(prev => ({ ...prev, sdk: true }));
+                            setDevTestStatus('Connected · test event received');
+                            setDevTesting(false);
+                          }, 1200);
+                        }}
+                      >
+                        Send test event
+                      </span>
+                      {devTestStatus && (
+                        <span id="vs" style={{ fontSize: 14.5, color: '#C9B8FF' }}>
+                          {devTestStatus}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ================= OVERLAYS (Notifications & Settings) ================= */}
+
+        {/* 1: Notifications Drawer: 490 CSS px wide, 40 CSS px avatars */}
+        <div id="ov" onClick={() => setNotifOpen(false)} />
+        <div id="np">
+          <div className="nt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Notifications</span>
+            {isMobile && (
+              <i className="ti ti-x" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => setNotifOpen(false)} />
+            )}
+          </div>
+          <div id="nl">
+            {NOTIFICATIONS.map((item, idx) => (
+              <div key={idx} className="ni">
+                <div
+                  style={{
+                    width: 40, // 40 CSS px avatars
+                    height: 40,
+                    borderRadius: '50%',
+                    background: item.bg,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  {item.icon ? (
+                    <i className={`ti ${item.icon}`} style={{ fontSize: 20, color: '#17141f' }} />
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 30 30" fill="#0a0a0a">
+                      <ellipse cx="15" cy="8" rx="4.6" ry="7" />
+                      <ellipse cx="15" cy="22" rx="4.6" ry="7" />
+                      <ellipse cx="8" cy="15" rx="7" ry="4.6" />
+                      <ellipse cx="22" cy="15" rx="7" ry="4.6" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, lineHeight: '22px', fontWeight: 600 }}>
+                    {item.title}
+                    <span style={{ fontWeight: 500, color: '#8d8d92', marginLeft: 6, fontSize: 14 }}>
+                      {item.time}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 15, lineHeight: '22px', fontWeight: 500, marginTop: 2 }}>
+                    {item.text}
+                  </div>
+                  {item.quote && <div className="nq">{item.quote}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 2: Settings Modal: 653 CSS px wide, 68 CSS px rows */}
+        <div id="sov" onClick={() => setSettingsModalOpen(false)} />
+        <div className="mdl" id="mdl">
+          <div className="mh">
+            Settings
+            <i
+              className="ti ti-x"
+              id="smx"
+              style={{ fontSize: 20, color: '#a6a6aa', cursor: 'pointer' }}
+              onClick={() => setSettingsModalOpen(false)}
+            />
+          </div>
+          <div className="ms">Notifications</div>
+          <div className="mr">
+            <div>
+              <div className="a1">Email Notifications</div>
+              <div className="a2">Receive updates by email.</div>
+            </div>
+            <span
+              className="tg s on"
+              onClick={e => e.currentTarget.classList.toggle('on')}
+            />
+          </div>
+          <div className="mr">
+            <div>
+              <div className="a1">Campaign Invitations</div>
+              <div className="a2">Emails inviting you to campaigns you haven’t joined.</div>
+            </div>
+            <span
+              className="tg s on"
+              onClick={e => e.currentTarget.classList.toggle('on')}
+            />
+          </div>
+          <div className="mr">
+            <div>
+              <div className="a1">Payout Alerts</div>
+              <div className="a2">Get notified when a payout is sent.</div>
+            </div>
+            <span
+              className="tg s on"
+              onClick={e => e.currentTarget.classList.toggle('on')}
+            />
+          </div>
+
+          <div className="ms" style={{ marginTop: 18 }}>
+            Account
+          </div>
+          <div className="mr">
+            <div>
+              <div className="a1">Founder Account</div>
+              <div className="a2">Create and fund campaigns.</div>
+            </div>
+            <span
+              className="tg s"
+              onClick={e => e.currentTarget.classList.toggle('on')}
+            />
+          </div>
+          <div className="mr">
+            <div>
+              <div className="a1">Log Out</div>
+              <div className="a2">Log out on this device.</div>
+            </div>
+            <span
+              className="mb"
+              onClick={() => {
+                setSettingsModalOpen(false);
+                showToast('Logged out');
+              }}
+            >
+              Log Out
+            </span>
+          </div>
+        </div>
+
+        {/* 3: More Menu Popup */}
+        <div className={`md ${moreMenuOpen ? 'on' : ''}`} id="md">
+          <div
+            onClick={() => {
+              setMoreMenuOpen(false);
+              navigateTo('pers', 'c');
+            }}
+          >
+            Personal
+          </div>
+          <div onClick={() => { setMoreMenuOpen(false); showToast('Umi v2.4'); }}>About</div>
+          <div onClick={() => { setMoreMenuOpen(false); showToast('Privacy Policy'); }}>Privacy Policy</div>
+          <div onClick={() => { setMoreMenuOpen(false); showToast('Terms of Service'); }}>Terms of Service</div>
+          <hr />
+          <div onClick={() => { setMoreMenuOpen(false); showToast('Logged out'); }}>Log Out</div>
+        </div>
+
+        {/* 4: Toast Popup */}
+        <div id="tst" className={toastMsg ? 'on' : ''}>
+          {toastMsg}
+        </div>
+      </div>
+    </div>
+  );
+}
