@@ -1,0 +1,6 @@
+{
+  "name": "Umi Creator Dashboard",
+  "description": "Discover and create subscription affiliate campaigns, track referrals, monitor earnings, and manage creator payouts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
