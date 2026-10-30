@@ -188,6 +188,137 @@ interface ChartConfig {
   defs: Record<string, { n: string; d: number[]; p: string }>;
 }
 
+interface BreadcrumbItem {
+  label: string;
+  icon?: string;
+  onClick?: () => void;
+  active?: boolean;
+}
+
+function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
+  return (
+    <nav aria-label="Breadcrumb" className="breadcrumbs-nav">
+      {items.map((item, idx) => {
+        const isLast = idx === items.length - 1;
+        return (
+          <div key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {idx > 0 && <i className="ti ti-chevron-right bc-sep" />}
+            {item.onClick && !isLast ? (
+              <button
+                type="button"
+                className="bc-link"
+                onClick={item.onClick}
+              >
+                {item.icon && <i className={`ti ${item.icon}`} style={{ fontSize: 15 }} />}
+                <span>{item.label}</span>
+              </button>
+            ) : (
+              <span className={isLast ? 'bc-current' : 'bc-link'} style={!isLast ? { cursor: 'default' } : undefined}>
+                {item.icon && (
+                  <i
+                    className={`ti ${item.icon}`}
+                    style={{ fontSize: 15, color: isLast ? '#C9B8FF' : '#8d8d92' }}
+                  />
+                )}
+                <span>{item.label}</span>
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+interface AccentTooltipProps {
+  text: React.ReactNode;
+  children: React.ReactNode;
+  placement?: 'top' | 'bottom';
+  maxWidth?: number;
+  align?: 'center' | 'left' | 'right';
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+function AccentTooltip({
+  text,
+  children,
+  placement = 'top',
+  maxWidth = 240,
+  align = 'center',
+  className,
+  style,
+}: AccentTooltipProps) {
+  const [show, setShow] = useState(false);
+  const isTop = placement === 'top';
+
+  return (
+    <div
+      className={className}
+      style={{ position: 'relative', width: '100%', height: '100%', ...style }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+    >
+      {children}
+      {show && (
+        <div
+          role="tooltip"
+          style={{
+            position: 'absolute',
+            ...(isTop
+              ? { bottom: 'calc(100% + 8px)' }
+              : { top: 'calc(100% + 8px)' }),
+            ...(align === 'center'
+              ? { left: '50%', transform: 'translateX(-50%)' }
+              : align === 'left'
+              ? { left: 0 }
+              : { right: 0 }),
+            background: '#C9B8FF',
+            color: '#0a0a0a',
+            fontSize: 12.5,
+            fontWeight: 500,
+            lineHeight: '17px',
+            padding: '8px 12px',
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.6), 0 0 16px rgba(201, 184, 255, 0.35)',
+            whiteSpace: 'normal',
+            width: 'max-content',
+            maxWidth,
+            zIndex: 60,
+            pointerEvents: 'none',
+            textAlign: align === 'center' ? 'center' : 'left',
+          }}
+        >
+          {text}
+          <div
+            style={{
+              position: 'absolute',
+              ...(isTop
+                ? {
+                    top: '100%',
+                    borderColor: '#C9B8FF transparent transparent transparent',
+                  }
+                : {
+                    bottom: '100%',
+                    borderColor: 'transparent transparent #C9B8FF transparent',
+                  }),
+              ...(align === 'center'
+                ? { left: '50%', transform: 'translateX(-50%)' }
+                : align === 'left'
+                ? { left: 14 }
+                : { right: 14 }),
+              borderWidth: 5,
+              borderStyle: 'solid',
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SvgChart({
   title,
   config,
@@ -292,6 +423,62 @@ function SvgChart({
   }, [dts, isNarrow, X0, W]);
 
   const activePt = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : null;
+
+  // Date calculation for the active hover point
+  const hoverDateStr = useMemo(() => {
+    if (hoverIndex === null) return '';
+    if (dts.length > 0 && dts[0]) {
+      const parts = dts[0].split(' ');
+      const month = parts[0];
+      const startDay = parseInt(parts[1], 10) || 1;
+      const d = new Date(2026, month === 'Sep' ? 8 : 9, startDay + hoverIndex);
+      const mName = d.toLocaleDateString('en-US', { month: 'short' });
+      return `${mName} ${d.getDate()}`;
+    }
+    return `Day ${hoverIndex + 1}`;
+  }, [hoverIndex, dts]);
+
+  // Extract key comparison metrics: Earned & Subscribers and supporting data
+  const metricComparison = useMemo(() => {
+    if (hoverIndex === null) return null;
+
+    const earnedKey = Object.keys(defs).find(
+      k => k === 'ea' || k === 'er' || k === 'rev' || defs[k].p === '$'
+    );
+    const subKey = Object.keys(defs).find(
+      k => k === 'su' || k === 'sub' || k === 'sb' || defs[k].n.toLowerCase().includes('sub')
+    );
+    const clickKey = Object.keys(defs).find(
+      k => k === 'clk' || k === 'ck' || defs[k].n.toLowerCase().includes('click')
+    );
+    const refKey = Object.keys(defs).find(
+      k => k === 'ref' || k === 'rf' || defs[k].n.toLowerCase().includes('refer')
+    );
+
+    const earnedVal = earnedKey ? defs[earnedKey].d[hoverIndex] : null;
+    const subVal = subKey ? defs[subKey].d[hoverIndex] : null;
+    const clickVal = clickKey ? defs[clickKey].d[hoverIndex] : null;
+    const refVal = refKey ? defs[refKey].d[hoverIndex] : null;
+
+    const earnedFormatted = earnedVal !== null ? `$${earnedVal.toFixed(2)}` : null;
+    const subFormatted = subVal !== null ? `${Math.round(subVal)}` : null;
+    const avgPerSub =
+      earnedVal !== null && subVal && subVal > 0 ? `$${(earnedVal / subVal).toFixed(2)}` : null;
+
+    return {
+      earnedKey,
+      subKey,
+      clickKey,
+      refKey,
+      earnedVal,
+      subVal,
+      clickVal,
+      refVal,
+      earnedFormatted,
+      subFormatted,
+      avgPerSub,
+    };
+  }, [hoverIndex, defs]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', minWidth: 0 }}>
@@ -413,7 +600,15 @@ function SvgChart({
                     y2={Y0 + H}
                     x1={activePt[0]}
                     x2={activePt[0]}
-                    stroke="#3a3a3e"
+                    stroke="#C9B8FF"
+                    strokeOpacity="0.4"
+                    strokeDasharray="3 3"
+                  />
+                  <circle
+                    cx={activePt[0]}
+                    cy={activePt[1]}
+                    r="9"
+                    fill="rgba(201, 184, 255, 0.25)"
                   />
                   <circle
                     cx={activePt[0]}
@@ -421,7 +616,7 @@ function SvgChart({
                     r="5"
                     fill="#C9B8FF"
                     stroke="#0a0a0a"
-                    strokeWidth="2"
+                    strokeWidth="2.5"
                   />
                 </>
               )}
@@ -429,19 +624,133 @@ function SvgChart({
           )}
         </svg>
 
-        {activePt && hoverIndex !== null && !empty && (
+        {activePt && hoverIndex !== null && !empty && metricComparison && (
           <div
-            className="tip"
+            className={`tip ${activePt[1] > vh * 0.44 ? 'tip-above' : 'tip-below'}`}
             style={{
               display: 'block',
-              left: `${Math.min(Math.max((activePt[0] / vw) * 100, 15), 85)}%`,
-              top: `${Math.max((activePt[1] / vh) * 100, 20)}%`,
-              transform: 'translate(-50%, -36px)',
+              left: `${Math.min(Math.max((activePt[0] / vw) * 100, 18), 82)}%`,
+              top: `${(activePt[1] / vh) * 100}%`,
+              transform: activePt[1] > vh * 0.44 ? 'translate(-50%, calc(-100% - 14px))' : 'translate(-50%, 14px)',
             }}
           >
-            <span style={{ color: '#9a9a9f' }}>Day {hoverIndex + 1}</span>
-            <br />
-            {def.n} · {def.p === '$' ? '$' + def.d[hoverIndex].toFixed(2) : Math.round(def.d[hoverIndex])}
+            {/* Header: Date + Day Index */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <i className="ti ti-calendar" style={{ fontSize: 13, color: '#32294e' }} />
+                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.02em', color: '#1a1628' }}>
+                  {hoverDateStr}
+                </span>
+              </div>
+              <span style={{ fontSize: 10.5, fontWeight: 700, background: 'rgba(23, 20, 31, 0.12)', padding: '2px 6px', borderRadius: 4, color: '#1d192c' }}>
+                Day {hoverIndex + 1} of {n}
+              </span>
+            </div>
+
+            {/* Primary active metric prominent display */}
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: '4px 0 8px', borderBottom: '1px solid rgba(23, 20, 31, 0.16)' }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#382f54', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {def.n}
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#0a0a0a', lineHeight: 1.1, marginTop: 2, letterSpacing: '-0.5px' }}>
+                  {def.p === '$' ? `$${def.d[hoverIndex].toFixed(2)}` : Math.round(def.d[hoverIndex]).toLocaleString()}
+                </div>
+              </div>
+              {metricComparison.avgPerSub && def.p === '$' && (
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#4a3d6f' }}>Per Sub</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1628' }}>{metricComparison.avgPerSub}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Comparison Grid: Earned vs Subscribers */}
+            <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+              {metricComparison.earnedFormatted && (
+                <div
+                  style={{
+                    background: currentKey === metricComparison.earnedKey ? 'rgba(23, 20, 31, 0.16)' : 'rgba(23, 20, 31, 0.08)',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    border: currentKey === metricComparison.earnedKey ? '1px solid rgba(23, 20, 31, 0.25)' : '1px solid transparent',
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#382f54', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <i className="ti ti-coin" style={{ fontSize: 10 }} />
+                    Earned
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#0a0a0a' }}>
+                    {metricComparison.earnedFormatted}
+                  </span>
+                </div>
+              )}
+
+              {metricComparison.subFormatted && (
+                <div
+                  style={{
+                    background: currentKey === metricComparison.subKey ? 'rgba(23, 20, 31, 0.16)' : 'rgba(23, 20, 31, 0.08)',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    border: currentKey === metricComparison.subKey ? '1px solid rgba(23, 20, 31, 0.25)' : '1px solid transparent',
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#382f54', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <i className="ti ti-users" style={{ fontSize: 10 }} />
+                    Subscribers
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#0a0a0a' }}>
+                    {metricComparison.subFormatted}
+                  </span>
+                </div>
+              )}
+
+              {metricComparison.clickVal !== null && (
+                <div
+                  style={{
+                    background: currentKey === metricComparison.clickKey ? 'rgba(23, 20, 31, 0.16)' : 'rgba(23, 20, 31, 0.08)',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    border: currentKey === metricComparison.clickKey ? '1px solid rgba(23, 20, 31, 0.25)' : '1px solid transparent',
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#382f54', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <i className="ti ti-cursor-text" style={{ fontSize: 10 }} />
+                    Clicks
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#0a0a0a' }}>
+                    {Math.round(metricComparison.clickVal)}
+                  </span>
+                </div>
+              )}
+
+              {metricComparison.refVal !== null && (
+                <div
+                  style={{
+                    background: currentKey === metricComparison.refKey ? 'rgba(23, 20, 31, 0.16)' : 'rgba(23, 20, 31, 0.08)',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    border: currentKey === metricComparison.refKey ? '1px solid rgba(23, 20, 31, 0.25)' : '1px solid transparent',
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 600, color: '#382f54', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <i className="ti ti-user-plus" style={{ fontSize: 10 }} />
+                    Referred
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#0a0a0a' }}>
+                    {Math.round(metricComparison.refVal)}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -769,10 +1078,17 @@ export default function App() {
   };
 
   // Nav Item Active Index
-  const railActiveIdx = cur === 'disc' ? 0 : cur === 'earn' ? 2 : cur === 'prof' ? 3 : -1;
+  const railActiveIdx =
+    cur === 'disc' || cur === 'camp' || cur === 'join' || cur === 'new'
+      ? 0
+      : cur === 'earn' || cur === 'wd'
+      ? 2
+      : cur === 'prof'
+      ? 3
+      : -1;
 
-  // Is this a sidebar screen (Section A: disc, earn, prof, pers)?
-  const isSidebarScreen = cur === 'disc' || cur === 'earn' || cur === 'prof' || cur === 'pers';
+  // Add sidebar rail across all sections
+  const isSidebarScreen = true;
 
   return (
     <div
@@ -805,7 +1121,7 @@ export default function App() {
             <div className="rl">
               {/* 0: Campaigns */}
               <div
-                className={`it ${cur === 'disc' && !notifOpen ? 'a' : ''}`}
+                className={`it ${(cur === 'disc' || cur === 'camp' || cur === 'join' || cur === 'new') && !notifOpen ? 'a' : ''}`}
                 onClick={() => navigateTo('disc')}
               >
                 <i className="ti ti-speakerphone" />
@@ -826,7 +1142,7 @@ export default function App() {
 
               {/* 2: Earnings */}
               <div
-                className={`it ${cur === 'earn' && !notifOpen ? 'a' : ''}`}
+                className={`it ${(cur === 'earn' || cur === 'wd') && !notifOpen ? 'a' : ''}`}
                 onClick={() => navigateTo('earn')}
               >
                 <i className="ti ti-coin" />
@@ -903,9 +1219,9 @@ export default function App() {
                     <div className="h1">Campaigns</div>
                     {/* On md: "New Campaign" moves to page header */}
                     {isMd && (
-                      <div className="nb" style={{ margin: 0 }} onClick={() => navigateTo('new')}>
+                      <div className="nb" style={{ margin: 0 }} onClick={() => navigateTo('new')} title="Create new campaign">
+                        <i className="ti ti-plus" style={{ fontSize: 15 }} />
                         New Campaign
-                        <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
                       </div>
                     )}
                   </div>
@@ -1176,9 +1492,9 @@ export default function App() {
             {/* Right widget column */}
             <div className="camp-right">
               {!isBelow900 && (
-                <div className="nb" onClick={() => navigateTo('new')}>
+                <div className="nb" onClick={() => navigateTo('new')} title="Create new campaign">
+                  <i className="ti ti-plus" style={{ fontSize: 15 }} />
                   New Campaign
-                  <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
                 </div>
               )}
 
@@ -1299,7 +1615,7 @@ export default function App() {
 
         {/* ================= SCREEN 2: EARNINGS (earn) ================= */}
         <div className={`scr ${cur === 'earn' ? 'on' : ''}`} id="earn">
-          <div className="layout-a-main" style={{ maxWidth: 830 }}>
+          <div className="layout-a-main" style={{ maxWidth: 1040 }}>
             <div className="hh" style={{ height: 42 }}>
               <div className="h1">Earnings</div>
               <div
@@ -1331,38 +1647,101 @@ export default function App() {
             </div>
 
             <div className="stat-grid" id="est" style={{ marginTop: 24 }}>
-              <div className="stat">
-                <div className="a1">
-                  <i className="ti ti-clock" style={{ fontSize: 16 }} />
-                  Pending
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <i className="ti ti-clock" style={{ fontSize: 13 }} />
+                      Pending Earnings
+                    </div>
+                    <div style={{ fontSize: 11.5, opacity: 0.9, lineHeight: '16px' }}>
+                      Held for 30 days to protect against subscriber refunds. Matures into Payable automatically.
+                    </div>
+                  </div>
+                }
+                maxWidth={250}
+              >
+                <div className="stat" style={{ cursor: 'help' }}>
+                  <div className="a1">
+                    <i className="ti ti-clock" style={{ fontSize: 16 }} />
+                    Pending
+                  </div>
+                  <div className="a2">$12.00</div>
+                  <div className="a3">In the 30-day hold</div>
                 </div>
-                <div className="a2">$12.00</div>
-                <div className="a3">In the 30-day hold</div>
-              </div>
-              <div className="stat">
-                <div className="a1">
-                  <i className="ti ti-calendar-event" style={{ fontSize: 16 }} />
-                  Payable
+              </AccentTooltip>
+
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <i className="ti ti-calendar-event" style={{ fontSize: 13 }} />
+                      Payable Balance
+                    </div>
+                    <div style={{ fontSize: 11.5, opacity: 0.9, lineHeight: '16px' }}>
+                      Cleared funds ready to be transferred directly to your balance on the next weekly run.
+                    </div>
+                  </div>
+                }
+                maxWidth={250}
+              >
+                <div className="stat" style={{ cursor: 'help' }}>
+                  <div className="a1">
+                    <i className="ti ti-calendar-event" style={{ fontSize: 16 }} />
+                    Payable
+                  </div>
+                  <div className="a2">$6.00</div>
+                  <div className="a3">Next weekly payout run</div>
                 </div>
-                <div className="a2">$6.00</div>
-                <div className="a3">Next weekly payout run</div>
-              </div>
-              <div className="stat">
-                <div className="a1">
-                  <i className="ti ti-send" style={{ fontSize: 16 }} />
-                  Paid out
+              </AccentTooltip>
+
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <i className="ti ti-send" style={{ fontSize: 13 }} />
+                      Paid Out to Date
+                    </div>
+                    <div style={{ fontSize: 11.5, opacity: 0.9, lineHeight: '16px' }}>
+                      Lifetime cumulative earnings successfully settled and credited to your connected Stripe account.
+                    </div>
+                  </div>
+                }
+                maxWidth={250}
+              >
+                <div className="stat" style={{ cursor: 'help' }}>
+                  <div className="a1">
+                    <i className="ti ti-send" style={{ fontSize: 16 }} />
+                    Paid out
+                  </div>
+                  <div className="a2">$188.00</div>
+                  <div className="a3">Sent to your Stripe balance</div>
                 </div>
-                <div className="a2">$188.00</div>
-                <div className="a3">Sent to your Stripe balance</div>
-              </div>
-              <div className="stat">
-                <div className="a1">
-                  <i className="ti ti-arrow-back-up" style={{ fontSize: 16 }} />
-                  Reversed
+              </AccentTooltip>
+
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <i className="ti ti-arrow-back-up" style={{ fontSize: 13 }} />
+                      Reversed Earnings
+                    </div>
+                    <div style={{ fontSize: 11.5, opacity: 0.9, lineHeight: '16px' }}>
+                      2 refunded subscriber payments reversed before clearing the 30-day hold window.
+                    </div>
+                  </div>
+                }
+                maxWidth={250}
+              >
+                <div className="stat" style={{ cursor: 'help' }}>
+                  <div className="a1">
+                    <i className="ti ti-arrow-back-up" style={{ fontSize: 16 }} />
+                    Reversed
+                  </div>
+                  <div className="a2">$4.20</div>
+                  <div className="a3">2 refunded payments</div>
                 </div>
-                <div className="a2">$4.20</div>
-                <div className="a3">2 refunded payments</div>
-              </div>
+              </AccentTooltip>
             </div>
 
             <div className="info">
@@ -1396,78 +1775,119 @@ export default function App() {
                 <span className="r">Subscribers</span>
                 <span className="r">Earned</span>
               </div>
-              <div className="tr">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span
-                    className="tl"
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 9,
-                      background: '#e4d8ff',
-                      fontSize: 18,
-                    }}
-                  >
-                    <i className="ti ti-aperture" />
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700 }}>Palazzo Lens Breakdown</div>
+                    <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                      20% share · 18 subscribers · $5.00 avg per sub
+                    </div>
+                  </div>
+                }
+                align="left"
+                maxWidth={260}
+              >
+                <div className="tr" style={{ cursor: 'default' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span
+                      className="tl"
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 9,
+                        background: '#e4d8ff',
+                        fontSize: 18,
+                      }}
+                    >
+                      <i className="ti ti-aperture" />
+                    </span>
+                    <b style={{ fontWeight: 500, fontSize: 16 }}>Palazzo Lens</b>
                   </span>
-                  <b style={{ fontWeight: 500, fontSize: 16 }}>Palazzo Lens</b>
-                </span>
-                <span className="r col-share" style={{ color: '#a6a6aa' }}>
-                  20%
-                </span>
-                <span className="r">18</span>
-                <span className="r" style={{ fontWeight: 500 }}>
-                  $90.00
-                </span>
-              </div>
-              <div className="tr">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span
-                    className="tl"
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 9,
-                      background: '#cfe8dc',
-                      fontSize: 18,
-                    }}
-                  >
-                    <i className="ti ti-wave-sine" />
+                  <span className="r col-share" style={{ color: '#a6a6aa' }}>
+                    20%
                   </span>
-                  <b style={{ fontWeight: 500, fontSize: 16 }}>Tidal</b>
-                </span>
-                <span className="r col-share" style={{ color: '#a6a6aa' }}>
-                  25%
-                </span>
-                <span className="r">12</span>
-                <span className="r" style={{ fontWeight: 500 }}>
-                  $67.00
-                </span>
-              </div>
-              <div className="tr">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span
-                    className="tl"
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 9,
-                      background: '#ffd9e8',
-                      fontSize: 18,
-                    }}
-                  >
-                    <i className="ti ti-sun" />
+                  <span className="r">18</span>
+                  <span className="r" style={{ fontWeight: 500 }}>
+                    $90.00
                   </span>
-                  <b style={{ fontWeight: 500, fontSize: 16 }}>Lumen Habit</b>
-                </span>
-                <span className="r col-share" style={{ color: '#a6a6aa' }}>
-                  15%
-                </span>
-                <span className="r">6</span>
-                <span className="r" style={{ fontWeight: 500 }}>
-                  $31.00
-                </span>
-              </div>
+                </div>
+              </AccentTooltip>
+
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700 }}>Tidal Breakdown</div>
+                    <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                      25% share · 12 subscribers · $5.58 avg per sub
+                    </div>
+                  </div>
+                }
+                align="left"
+                maxWidth={260}
+              >
+                <div className="tr" style={{ cursor: 'default' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span
+                      className="tl"
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 9,
+                        background: '#cfe8dc',
+                        fontSize: 18,
+                      }}
+                    >
+                      <i className="ti ti-wave-sine" />
+                    </span>
+                    <b style={{ fontWeight: 500, fontSize: 16 }}>Tidal</b>
+                  </span>
+                  <span className="r col-share" style={{ color: '#a6a6aa' }}>
+                    25%
+                  </span>
+                  <span className="r">12</span>
+                  <span className="r" style={{ fontWeight: 500 }}>
+                    $67.00
+                  </span>
+                </div>
+              </AccentTooltip>
+
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700 }}>Lumen Habit Breakdown</div>
+                    <div style={{ fontSize: 11.5, marginTop: 2 }}>
+                      15% share · 6 subscribers · $5.17 avg per sub
+                    </div>
+                  </div>
+                }
+                align="left"
+                maxWidth={260}
+              >
+                <div className="tr" style={{ cursor: 'default' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span
+                      className="tl"
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 9,
+                        background: '#ffd9e8',
+                        fontSize: 18,
+                      }}
+                    >
+                      <i className="ti ti-sun" />
+                    </span>
+                    <b style={{ fontWeight: 500, fontSize: 16 }}>Lumen Habit</b>
+                  </span>
+                  <span className="r col-share" style={{ color: '#a6a6aa' }}>
+                    15%
+                  </span>
+                  <span className="r">6</span>
+                  <span className="r" style={{ fontWeight: 500 }}>
+                    $31.00
+                  </span>
+                </div>
+              </AccentTooltip>
             </div>
           </div>
         </div>
@@ -1650,7 +2070,7 @@ export default function App() {
 
         {/* ================= SCREEN 4: PERSONAL (pers) ================= */}
         <div className={`scr ${cur === 'pers' ? 'on' : ''}`} id="pers">
-          <div className="layout-a-main" style={{ maxWidth: 830 }}>
+          <div className="layout-a-main" style={{ maxWidth: 1040 }}>
             <div className="hd">Personal</div>
 
             <div className="tabs" id="pt" style={{ overflowX: 'auto', flexWrap: 'nowrap', scrollbarWidth: 'none' }}>
@@ -1970,12 +2390,19 @@ export default function App() {
                     <div id="inm" style={{ fontSize: 22, fontWeight: 600 }}>
                       {campaignState.nm}
                     </div>
-                    <span className="pill l" id="ist">
+                    <span
+                      className="pill"
+                      id="ist"
+                      style={{
+                        background: '#C9B8FF',
+                        color: '#0a0a0a',
+                        fontWeight: 600,
+                        borderRadius: 13,
+                        padding: '0 12px',
+                        height: 26,
+                      }}
+                    >
                       {isLive ? 'Live' : 'Setting up'}
-                    </span>
-                    <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                      <span className="btn sm">Edit</span>
-                      <span className="btn sm">Pause</span>
                     </span>
                   </div>
 
@@ -2057,86 +2484,148 @@ export default function App() {
                   <div className="stat-grid" id="ist4" style={{ marginTop: 26 }}>
                     {isLive ? (
                       <>
-                        <div className="stat">
-                          <div className="a1">
-                            <i className="ti ti-chart-bar" style={{ fontSize: 16 }} />
-                            Attributed revenue
+                        <AccentTooltip
+                          text={
+                            <div>
+                              <div style={{ fontWeight: 700, marginBottom: 2 }}>Attributed Revenue</div>
+                              <div style={{ fontSize: 11.5, opacity: 0.9 }}>
+                                Total subscription volume driven through creator links and referral codes.
+                              </div>
+                            </div>
+                          }
+                          maxWidth={240}
+                        >
+                          <div className="stat" style={{ cursor: 'help' }}>
+                            <div className="a1">
+                              <i className="ti ti-chart-bar" style={{ fontSize: 16 }} />
+                              Attributed revenue
+                            </div>
+                            <div className="a2">$4,820.00</div>
+                            <div className="a3">$612.00 last week</div>
                           </div>
-                          <div className="a2">$4,820.00</div>
-                          <div className="a3">$612.00 last week</div>
-                        </div>
-                        <div className="stat">
-                          <div className="a1">
-                            <i className="ti ti-users" style={{ fontSize: 16 }} />
-                            Paying subscribers
+                        </AccentTooltip>
+
+                        <AccentTooltip
+                          text={
+                            <div>
+                              <div style={{ fontWeight: 700, marginBottom: 2 }}>Active Subscribers</div>
+                              <div style={{ fontSize: 11.5, opacity: 0.9 }}>
+                                Paying subscribers verified and connected through campaign creator codes.
+                              </div>
+                            </div>
+                          }
+                          maxWidth={240}
+                        >
+                          <div className="stat" style={{ cursor: 'help' }}>
+                            <div className="a1">
+                              <i className="ti ti-users" style={{ fontSize: 16 }} />
+                              Paying subscribers
+                            </div>
+                            <div className="a2">214</div>
+                            <div className="a3">31 last week</div>
                           </div>
-                          <div className="a2">214</div>
-                          <div className="a3">31 last week</div>
-                        </div>
-                        <div className="stat">
-                          <div className="a1">
-                            <i className="ti ti-percentage" style={{ fontSize: 16 }} />
-                            Creator earnings
+                        </AccentTooltip>
+
+                        <AccentTooltip
+                          text={
+                            <div>
+                              <div style={{ fontWeight: 700, marginBottom: 2 }}>Creator Commissions</div>
+                              <div style={{ fontSize: 11.5, opacity: 0.9 }}>
+                                20% rev share earned across initial subscriptions and up to 6 months of renewals.
+                              </div>
+                            </div>
+                          }
+                          maxWidth={240}
+                        >
+                          <div className="stat" style={{ cursor: 'help' }}>
+                            <div className="a1">
+                              <i className="ti ti-percentage" style={{ fontSize: 16 }} />
+                              Creator earnings
+                            </div>
+                            <div className="a2">$819.40</div>
+                            <div className="a3">20% share · $81.94 fee</div>
                           </div>
-                          <div className="a2">$819.40</div>
-                          <div className="a3">20% share · $81.94 fee</div>
-                        </div>
-                        <div className="stat">
-                          <div className="a1">
-                            <i className="ti ti-wallet" style={{ fontSize: 16 }} />
-                            Wallet balance
+                        </AccentTooltip>
+
+                        <AccentTooltip
+                          text={
+                            <div>
+                              <div style={{ fontWeight: 700, marginBottom: 2 }}>Wallet Liquidity</div>
+                              <div style={{ fontSize: 11.5, opacity: 0.9 }}>
+                                Available escrow balance in your developer wallet for automatic creator payouts.
+                              </div>
+                            </div>
+                          }
+                          maxWidth={240}
+                        >
+                          <div className="stat" style={{ cursor: 'help' }}>
+                            <div className="a1">
+                              <i className="ti ti-wallet" style={{ fontSize: 16 }} />
+                              Wallet balance
+                            </div>
+                            <div className="a2">$1,098.66</div>
+                            <div className="a3">$196.60 reserved</div>
                           </div>
-                          <div className="a2">$1,098.66</div>
-                          <div className="a3">$196.60 reserved</div>
-                        </div>
+                        </AccentTooltip>
                       </>
                     ) : (
                       <>
-                        <div className="stat">
-                          <div className="a1">
-                            <i className="ti ti-chart-bar" style={{ fontSize: 16 }} />
-                            Attributed revenue
+                        <AccentTooltip text="Attributed revenue will populate once your campaign is live." maxWidth={220}>
+                          <div className="stat" style={{ cursor: 'help' }}>
+                            <div className="a1">
+                              <i className="ti ti-chart-bar" style={{ fontSize: 16 }} />
+                              Attributed revenue
+                            </div>
+                            <div className="a2" style={{ color: '#6f6f74' }}>
+                              $0.00
+                            </div>
+                            <div className="a3">—</div>
                           </div>
-                          <div className="a2" style={{ color: '#6f6f74' }}>
-                            $0.00
+                        </AccentTooltip>
+
+                        <AccentTooltip text="Subscribers acquired via creator links will show here." maxWidth={220}>
+                          <div className="stat" style={{ cursor: 'help' }}>
+                            <div className="a1">
+                              <i className="ti ti-users" style={{ fontSize: 16 }} />
+                              Paying subscribers
+                            </div>
+                            <div className="a2" style={{ color: '#6f6f74' }}>
+                              0
+                            </div>
+                            <div className="a3">—</div>
                           </div>
-                          <div className="a3">—</div>
-                        </div>
-                        <div className="stat">
-                          <div className="a1">
-                            <i className="ti ti-users" style={{ fontSize: 16 }} />
-                            Paying subscribers
+                        </AccentTooltip>
+
+                        <AccentTooltip text="Creator commissions reserved at 20% share once live." maxWidth={220}>
+                          <div className="stat" style={{ cursor: 'help' }}>
+                            <div className="a1">
+                              <i className="ti ti-percentage" style={{ fontSize: 16 }} />
+                              Creator earnings
+                            </div>
+                            <div className="a2" style={{ color: '#6f6f74' }}>
+                              $0.00
+                            </div>
+                            <div className="a3">20% share</div>
                           </div>
-                          <div className="a2" style={{ color: '#6f6f74' }}>
-                            0
+                        </AccentTooltip>
+
+                        <AccentTooltip text={campaignState.fund ? 'Wallet funded with $2,000.00 deposit.' : 'Fund your wallet to activate campaign payouts.'} maxWidth={220}>
+                          <div className="stat" style={{ cursor: 'help' }}>
+                            <div className="a1">
+                              <i className="ti ti-wallet" style={{ fontSize: 16 }} />
+                              Wallet balance
+                            </div>
+                            <div
+                              className="a2"
+                              style={{ color: !campaignState.fund ? '#6f6f74' : undefined }}
+                            >
+                              {campaignState.fund ? '$2,000.00' : '$0.00'}
+                            </div>
+                            <div className="a3">
+                              {campaignState.fund ? '$0.00 reserved' : 'Not funded'}
+                            </div>
                           </div>
-                          <div className="a3">—</div>
-                        </div>
-                        <div className="stat">
-                          <div className="a1">
-                            <i className="ti ti-percentage" style={{ fontSize: 16 }} />
-                            Creator earnings
-                          </div>
-                          <div className="a2" style={{ color: '#6f6f74' }}>
-                            $0.00
-                          </div>
-                          <div className="a3">20% share</div>
-                        </div>
-                        <div className="stat">
-                          <div className="a1">
-                            <i className="ti ti-wallet" style={{ fontSize: 16 }} />
-                            Wallet balance
-                          </div>
-                          <div
-                            className="a2"
-                            style={{ color: !campaignState.fund ? '#6f6f74' : undefined }}
-                          >
-                            {campaignState.fund ? '$2,000.00' : '$0.00'}
-                          </div>
-                          <div className="a3">
-                            {campaignState.fund ? '$0.00 reserved' : 'Not funded'}
-                          </div>
-                        </div>
+                        </AccentTooltip>
                       </>
                     )}
                   </div>
@@ -2318,10 +2807,12 @@ export default function App() {
         {/* ---------------- SCREEN 5: CAMPAIGN DETAIL (camp) ---------------- */}
         <div className={`scr ${cur === 'camp' ? 'on' : ''}`} id="camp">
           <div className="layout-b-main">
-            <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18, cursor: 'pointer' }}>
-              <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
-              Back
-            </div>
+            <Breadcrumbs
+              items={[
+                { label: 'Campaigns', icon: 'ti-speakerphone', onClick: () => navigateTo('disc') },
+                { label: 'Palazzo Lens', icon: 'ti-aperture', active: true },
+              ]}
+            />
 
             {/* Layout at >= 900: two columns 330px + 32px gap + 566px */}
             {!isBelow900 ? (
@@ -2735,10 +3226,13 @@ export default function App() {
         {/* ---------------- SCREEN 6: CREATOR CLAIM & ANALYTICS (join) ---------------- */}
         <div className={`scr ${cur === 'join' ? 'on' : ''}`} id="join">
           <div className="layout-b-main" style={{ maxWidth: 700 }}>
-            <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18, cursor: 'pointer' }}>
-              <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
-              Back to campaigns
-            </div>
+            <Breadcrumbs
+              items={[
+                { label: 'Campaigns', icon: 'ti-speakerphone', onClick: () => navigateTo('disc') },
+                { label: 'Palazzo Lens', icon: 'ti-aperture', onClick: () => navigateTo('camp') },
+                { label: 'Claim & Stats', icon: 'ti-link', active: true },
+              ]}
+            />
 
             <div
               style={{
@@ -2917,46 +3411,97 @@ export default function App() {
 
             {/* 4 Analytics Stat Tiles */}
             <div className="stat-grid" id="js4" style={{ marginTop: 20 }}>
-              <div className="stat">
-                <div className="a1">Link clicks</div>
-                <div
-                  className="a2"
-                  style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
-                >
-                  {codeClaimed ? '214' : '0'}
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Link Clicks</div>
+                    <div style={{ fontSize: 11.5, opacity: 0.9 }}>
+                      Total unique visits to your personalized campaign link and QR code scans.
+                    </div>
+                  </div>
+                }
+                maxWidth={230}
+              >
+                <div className="stat" style={{ cursor: 'help' }}>
+                  <div className="a1">Link clicks</div>
+                  <div
+                    className="a2"
+                    style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
+                  >
+                    {codeClaimed ? '214' : '0'}
+                  </div>
+                  <div className="a3">{codeClaimed ? '31 last week' : '—'}</div>
                 </div>
-                <div className="a3">{codeClaimed ? '31 last week' : '—'}</div>
-              </div>
-              <div className="stat">
-                <div className="a1">Referred users</div>
-                <div
-                  className="a2"
-                  style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
-                >
-                  {codeClaimed ? '63' : '0'}
+              </AccentTooltip>
+
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Referred Users</div>
+                    <div style={{ fontSize: 11.5, opacity: 0.9 }}>
+                      Users who installed and signed up using your creator affiliate link or code.
+                    </div>
+                  </div>
+                }
+                maxWidth={230}
+              >
+                <div className="stat" style={{ cursor: 'help' }}>
+                  <div className="a1">Referred users</div>
+                  <div
+                    className="a2"
+                    style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
+                  >
+                    {codeClaimed ? '63' : '0'}
+                  </div>
+                  <div className="a3">{codeClaimed ? '9 last week' : '—'}</div>
                 </div>
-                <div className="a3">{codeClaimed ? '9 last week' : '—'}</div>
-              </div>
-              <div className="stat">
-                <div className="a1">Paying subscribers</div>
-                <div
-                  className="a2"
-                  style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
-                >
-                  {codeClaimed ? '18' : '0'}
+              </AccentTooltip>
+
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Paying Subscribers</div>
+                    <div style={{ fontSize: 11.5, opacity: 0.9 }}>
+                      Referred users who converted to an active paid subscription plan.
+                    </div>
+                  </div>
+                }
+                maxWidth={230}
+              >
+                <div className="stat" style={{ cursor: 'help' }}>
+                  <div className="a1">Paying subscribers</div>
+                  <div
+                    className="a2"
+                    style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
+                  >
+                    {codeClaimed ? '18' : '0'}
+                  </div>
+                  <div className="a3">{codeClaimed ? '3 last week' : '—'}</div>
                 </div>
-                <div className="a3">{codeClaimed ? '3 last week' : '—'}</div>
-              </div>
-              <div className="stat">
-                <div className="a1">Earned</div>
-                <div
-                  className="a2"
-                  style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
-                >
-                  {codeClaimed ? '$90.00' : '$0.00'}
+              </AccentTooltip>
+
+              <AccentTooltip
+                text={
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Total Earned</div>
+                    <div style={{ fontSize: 11.5, opacity: 0.9 }}>
+                      Your 20% revenue share across initial subscription purchases and renewals.
+                    </div>
+                  </div>
+                }
+                maxWidth={230}
+              >
+                <div className="stat" style={{ cursor: 'help' }}>
+                  <div className="a1">Earned</div>
+                  <div
+                    className="a2"
+                    style={{ color: !codeClaimed ? '#6f6f74' : undefined }}
+                  >
+                    {codeClaimed ? '$90.00' : '$0.00'}
+                  </div>
+                  <div className="a3">{codeClaimed ? '20% of revenue' : '—'}</div>
                 </div>
-                <div className="a3">{codeClaimed ? '20% of revenue' : '—'}</div>
-              </div>
+              </AccentTooltip>
             </div>
 
             {/* How people found you */}
@@ -3016,10 +3561,12 @@ export default function App() {
         {/* ---------------- SCREEN 7: CREATE CAMPAIGN (new) ---------------- */}
         <div className={`scr ${cur === 'new' ? 'on' : ''}`} id="new">
           <div className="layout-b-main">
-            <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18, cursor: 'pointer' }}>
-              <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
-              Cancel
-            </div>
+            <Breadcrumbs
+              items={[
+                { label: 'Campaigns', icon: 'ti-speakerphone', onClick: () => navigateTo('disc') },
+                { label: 'Create Campaign', icon: 'ti-plus', active: true },
+              ]}
+            />
 
             {/* 330 CSS px cover (radius 18) + 32 gap + 566 CSS px form */}
             <div style={{ display: 'flex', flexDirection: isBelow900 ? 'column' : 'row', gap: 32 }}>
@@ -3364,10 +3911,12 @@ export default function App() {
         {/* ---------------- SCREEN 8: WITHDRAW (wd) ---------------- */}
         <div className={`scr ${cur === 'wd' ? 'on' : ''}`} id="wd">
           <div className="layout-b-main">
-            <div className="bkl" onClick={() => navigateTo('earn')} style={{ height: 32, marginBottom: 18, cursor: 'pointer' }}>
-              <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
-              Back to earnings
-            </div>
+            <Breadcrumbs
+              items={[
+                { label: 'Earnings', icon: 'ti-coin', onClick: () => navigateTo('earn') },
+                { label: 'Withdraw', icon: 'ti-arrow-up-right', active: true },
+              ]}
+            />
 
             {!withdrawDone ? (
               <div id="f1" style={{ display: 'flex', flexDirection: isBelow900 ? 'column' : 'row', gap: 32 }}>
@@ -3715,20 +4264,6 @@ export default function App() {
 
           <div className="dsd" style={{ display: isBelow900 ? 'none' : 'block' }}>
             <div
-              className="bkl"
-              style={{
-                height: 48,
-                margin: '0 -12px 18px',
-                padding: '0 16px',
-                borderBottom: '1px solid #1f1f22',
-                width: 246,
-              }}
-              onClick={() => navigateTo('pers', 'i')}
-            >
-              <i className="ti ti-arrow-left" style={{ fontSize: 16 }} />
-              Back to Personal
-            </div>
-            <div
               style={{
                 fontFamily: 'var(--font-mono)',
                 fontSize: 13,
@@ -3803,6 +4338,12 @@ export default function App() {
               padding: isSm ? '16px 16px 90px' : '36px 20px 100px',
             }}
           >
+            <Breadcrumbs
+              items={[
+                { label: 'Personal Workspace', icon: 'ti-user', onClick: () => navigateTo('pers', 'i') },
+                { label: 'Developer & SDK', icon: 'ti-code', active: true },
+              ]}
+            />
             {devTab === 'asc' && (
               <div className="dp2">
                 <div style={{ fontSize: 27, lineHeight: '36px', fontWeight: 500, letterSpacing: -0.4 }}>
