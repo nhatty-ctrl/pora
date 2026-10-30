@@ -189,27 +189,48 @@ interface ChartConfig {
 }
 
 function SvgChart({
+  title,
   config,
   currentKey,
   onSelectKey,
 }: {
+  title?: string;
   config: ChartConfig;
   currentKey: string;
   onSelectKey: (k: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [containerWidth, setContainerWidth] = useState(config.vw || 600);
 
-  const { vw, vh, dts, empty, em, order, defs } = config;
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setContainerWidth(Math.floor(entry.contentRect.width));
+        }
+      }
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const isNarrow = containerWidth < 600;
+  const vw = Math.max(containerWidth, 260);
+  const vh = isNarrow ? 190 : 240;
+
+  const { dts, empty, em, order, defs } = config;
   const def = defs[currentKey] || defs[order[0]];
   const data = def.d;
   const n = data.length;
 
-  const X0 = 28;
-  const W = vw - 114;
-  const Y0 = 20;
-  const H = vh - 80;
+  const X0 = 24;
+  const W = Math.max(vw - 84, 100);
+  const Y0 = 16;
+  const H = vh - 60;
 
   const mx = useMemo(() => {
     return Math.max(...data) * 1.15;
@@ -240,56 +261,88 @@ function SvgChart({
     setHoverIndex(idx);
   };
 
+  const handleTouch = (e: React.TouchEvent<SVGSVGElement>) => {
+    if (empty || !svgRef.current || points.length === 0) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const touch = e.touches[0];
+    if (!touch) return;
+    const x = ((touch.clientX - rect.left) / rect.width) * vw;
+    const idx = Math.max(0, Math.min(n - 1, Math.round(((x - X0) / W) * (n - 1))));
+    setHoverIndex(idx);
+  };
+
   const handleMouseLeave = () => {
     setHoverIndex(null);
   };
 
+  const displayedDts = useMemo(() => {
+    if (!isNarrow || dts.length <= 3) {
+      return dts.map((t, i) => ({
+        t,
+        x: X0 + (i * W) / (dts.length - 1),
+        align: (i === 0 ? 'start' : i === dts.length - 1 ? 'end' : 'middle') as 'start' | 'end' | 'middle',
+      }));
+    }
+    const mid = Math.floor((dts.length - 1) / 2);
+    return [
+      { t: dts[0], x: X0, align: 'start' as const },
+      { t: dts[mid], x: X0 + (mid * W) / (dts.length - 1), align: 'middle' as const },
+      { t: dts[dts.length - 1], x: X0 + W, align: 'end' as const },
+    ];
+  }, [dts, isNarrow, X0, W]);
+
   const activePt = hoverIndex !== null && points[hoverIndex] ? points[hoverIndex] : null;
 
   return (
-    <>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <div className="dd">
-          <div
-            className="btn sm"
-            style={{ minWidth: 160, justifyContent: 'space-between' }}
-            onClick={e => {
-              e.stopPropagation();
-              setMenuOpen(!menuOpen);
-            }}
-          >
-            <span>{def.n}</span>
+    <div ref={containerRef} style={{ width: '100%', minWidth: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, minHeight: 38 }}>
+        {title ? <div className="h2">{title}</div> : <div />}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div className="dd">
+            <div
+              className="btn sm"
+              style={{ minWidth: 140, justifyContent: 'space-between' }}
+              onClick={e => {
+                e.stopPropagation();
+                setMenuOpen(!menuOpen);
+              }}
+            >
+              <span>{def.n}</span>
+              <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
+            </div>
+            <div className={`dm ${menuOpen ? 'on' : ''}`}>
+              {order.map(k => (
+                <div
+                  key={k}
+                  className={k === currentKey ? 'on' : ''}
+                  onClick={e => {
+                    e.stopPropagation();
+                    onSelectKey(k);
+                    setMenuOpen(false);
+                  }}
+                >
+                  {defs[k].n}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="btn sm" style={{ minWidth: 100 }}>
+            {isNarrow ? '14 days' : 'Last 28 days'}
             <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
           </div>
-          <div className={`dm ${menuOpen ? 'on' : ''}`}>
-            {order.map(k => (
-              <div
-                key={k}
-                className={k === currentKey ? 'on' : ''}
-                onClick={e => {
-                  e.stopPropagation();
-                  onSelectKey(k);
-                  setMenuOpen(false);
-                }}
-              >
-                {defs[k].n}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="btn sm" style={{ minWidth: 110 }}>
-          {vw === 820 ? 'Last 14 days' : 'Last 28 days'}
-          <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
         </div>
       </div>
 
-      <div className="gr" style={{ marginTop: 20 }}>
+      <div className="gr" style={{ marginTop: 16 }}>
         <svg
           ref={svgRef}
           viewBox={`0 0 ${vw} ${vh}`}
-          style={{ width: '100%', display: 'block', cursor: 'crosshair' }}
+          style={{ width: '100%', height: vh, display: 'block', cursor: 'crosshair', touchAction: 'none' }}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
+          onTouchStart={handleTouch}
+          onTouchMove={handleTouch}
+          onTouchEnd={() => setHoverIndex(null)}
         >
           {empty ? (
             <>
@@ -301,7 +354,7 @@ function SvgChart({
                 x={vw / 2}
                 y={Y0 + H / 2 - 4}
                 fill="#a6a6aa"
-                fontSize="17"
+                fontSize="16"
                 fontWeight="500"
                 textAnchor="middle"
                 fontFamily="Inter,sans-serif"
@@ -310,9 +363,9 @@ function SvgChart({
               </text>
               <text
                 x={vw / 2}
-                y={Y0 + H / 2 + 20}
+                y={Y0 + H / 2 + 18}
                 fill="#6f6f74"
-                fontSize="14"
+                fontSize="13"
                 textAnchor="middle"
                 fontFamily="Inter,sans-serif"
               >
@@ -327,28 +380,29 @@ function SvgChart({
                   <g key={g}>
                     <line x1={X0} x2={X0 + W} y1={y} y2={y} stroke="#1d1d20" />
                     <text
-                      x={vw - 44}
-                      y={y + 5}
+                      x={vw - 12}
+                      y={y + 4}
                       fill="#7d7d82"
-                      fontSize="14"
+                      fontSize="12"
                       fontFamily="Inter,sans-serif"
+                      textAnchor="end"
                     >
                       {formatVal(mx * (1 - g / 2), def.p)}
                     </text>
                   </g>
                 );
               })}
-              {dts.map((t, i) => (
+              {displayedDts.map((item, idx) => (
                 <text
-                  key={t}
-                  x={X0 + (i * W) / (dts.length - 1)}
-                  y={vh - 20}
+                  key={idx}
+                  x={item.x}
+                  y={vh - 12}
                   fill="#7d7d82"
-                  fontSize="14"
+                  fontSize="12"
                   fontFamily="Inter,sans-serif"
-                  textAnchor={i === 0 ? 'start' : i === dts.length - 1 ? 'end' : 'middle'}
+                  textAnchor={item.align}
                 >
-                  {t}
+                  {item.t}
                 </text>
               ))}
               <path d={pathD} fill="none" stroke="#C9B8FF" strokeWidth="2.5" />
@@ -380,9 +434,9 @@ function SvgChart({
             className="tip"
             style={{
               display: 'block',
-              left: `${(activePt[0] / vw) * 100}%`,
-              top: `${(activePt[1] / vh) * 100}%`,
-              transform: 'translate(10px, -20px)',
+              left: `${Math.min(Math.max((activePt[0] / vw) * 100, 15), 85)}%`,
+              top: `${Math.max((activePt[1] / vh) * 100, 20)}%`,
+              transform: 'translate(-50%, -36px)',
             }}
           >
             <span style={{ color: '#9a9a9f' }}>Day {hoverIndex + 1}</span>
@@ -391,7 +445,7 @@ function SvgChart({
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -409,7 +463,14 @@ export default function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  const isMobile = windowWidth < 768;
+
+  // Breakpoint definitions: sm < 640, md 640-899, lg 900-1199, xl >= 1200
+  const isSm = windowWidth < 640;
+  const isMd = windowWidth >= 640 && windowWidth < 900;
+  const isLg = windowWidth >= 900 && windowWidth < 1200;
+  const isXl = windowWidth >= 1200;
+  const isBelow900 = windowWidth < 900;
+  const isMobile = isSm; // backwards compatibility alias for any remaining references
 
   // App core state
   const [campaignState, setCampaignState] = useState({
@@ -531,6 +592,18 @@ export default function App() {
       setAddCardOpen(false);
     }
   };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>).__umiNav = {
+        setScreen: (s: Screen, opt?: string) => navigateTo(s, opt),
+        openNotif: () => setNotifOpen(true),
+        closeNotif: () => setNotifOpen(false),
+        openSettings: () => setSettingsModalOpen(true),
+        closeSettings: () => setSettingsModalOpen(false),
+      };
+    }
+  });
 
   // Calendar days generation
   const calDays = useMemo(() => {
@@ -774,115 +847,144 @@ export default function App() {
                 </span>
                 <span className="t">Profile</span>
               </div>
+              {/* On sm: 5th item in bottom tab bar */}
+              {isSm && (
+                <div
+                  className={`it ${moreMenuOpen ? 'a' : ''}`}
+                  id="mb"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setMoreMenuOpen(!moreMenuOpen);
+                  }}
+                >
+                  <i className="ti ti-menu-2" />
+                  <span className="t">More</span>
+                </div>
+              )}
             </div>
 
-            {/* Bottom More menu button */}
-            <div
-              className="it rail-more"
-              id="mb"
-              onClick={e => {
-                e.stopPropagation();
-                setMoreMenuOpen(!moreMenuOpen);
-              }}
-            >
-              <i className="ti ti-menu-2" />
-              <span className="t">More</span>
-            </div>
+            {/* Bottom More menu button for desktop / tablet */}
+            {!isSm && (
+              <div
+                className="it rail-more"
+                id="mb"
+                onClick={e => {
+                  e.stopPropagation();
+                  setMoreMenuOpen(!moreMenuOpen);
+                }}
+              >
+                <i className="ti ti-menu-2" />
+                <span className="t">More</span>
+              </div>
+            )}
           </div>
         )}
 
         {/* ================= SCREEN 1: CAMPAIGNS (disc) ================= */}
         <div className={`scr ${cur === 'disc' ? 'on' : ''}`} id="disc">
-          <div
-            className="mobile-content mobile-col"
-            style={{
-              marginLeft: isMobile ? 0 : 368, // rail 350 + 18 inset = 368
-              display: 'flex',
-              padding: isMobile ? '16px' : '24px 24px 80px',
-              maxWidth: 1360,
-            }}
-          >
-            {/* Center text column: 585 CSS px wide */}
-            <div
-              className="mobile-full"
-              style={{ width: isMobile ? '100%' : 585, flexShrink: 0 }}
-            >
-              <div className="hh">
-                <div className="h1">Campaigns</div>
-                <div style={{ position: 'relative' }}>
-                  <i
-                    className="ti ti-search"
-                    style={{ position: 'absolute', left: 12, top: 11, fontSize: 16, color: '#6f6f74' }}
-                  />
-                  <input
-                    id="sq"
-                    className="srch"
-                    placeholder="Search campaigns"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Mobile Categories Horizontal Chip Row: 36px tall */}
-              {isMobile && (
+          <div className="layout-a-main">
+            <div className="camp-grid">
+              {/* Main text column */}
+              <div className="camp-main">
                 <div
+                  className="hh"
                   style={{
+                    height: 'auto',
+                    minHeight: 42,
                     display: 'flex',
-                    gap: 8,
-                    overflowX: 'auto',
-                    padding: '12px 0 6px',
-                    height: 54,
-                    scrollbarWidth: 'none',
+                    flexDirection: isSm ? 'column' : 'row',
+                    alignItems: isSm ? 'stretch' : 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    marginBottom: 16,
                   }}
                 >
-                  {CATEGORIES.map(cat => {
-                    const isSelected = Boolean(csel[cat]);
-                    return (
-                      <div
-                        key={cat}
-                        style={{
-                          height: 36,
-                          padding: '0 14px',
-                          borderRadius: 18,
-                          background: isSelected ? '#C9B8FF' : '#1e1e22',
-                          color: isSelected ? '#0a0a0a' : '#d4d4d8',
-                          fontSize: 14,
-                          fontWeight: 500,
-                          display: 'flex',
-                          alignItems: 'center',
-                          whiteSpace: 'nowrap',
-                          cursor: 'pointer',
-                        }}
-                        onClick={() => {
-                          if (cat === 'All Categories') setCsel({ 'All Categories': 1 });
-                          else {
-                            setCsel(prev => {
-                              const copy = { ...prev };
-                              delete copy['All Categories'];
-                              if (copy[cat]) delete copy[cat];
-                              else copy[cat] = 1;
-                              if (Object.keys(copy).length === 0) return { 'All Categories': 1 };
-                              return copy;
-                            });
-                          }
-                        }}
-                      >
-                        {cat}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: isSm ? '100%' : 'auto', gap: 12 }}>
+                    <div className="h1">Campaigns</div>
+                    {/* On md: "New Campaign" moves to page header */}
+                    {isMd && (
+                      <div className="nb" style={{ margin: 0 }} onClick={() => navigateTo('new')}>
+                        New Campaign
+                        <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
                       </div>
-                    );
-                  })}
+                    )}
+                  </div>
+                  {/* Search: full width on sm, standard width on md/lg/xl */}
+                  <div style={{ position: 'relative', width: isSm ? '100%' : 260 }}>
+                    <i
+                      className="ti ti-search"
+                      style={{ position: 'absolute', left: 12, top: 11, fontSize: 16, color: '#6f6f74' }}
+                    />
+                    <input
+                      id="sq"
+                      className="srch"
+                      style={{ width: '100%' }}
+                      placeholder="Search campaigns"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                    />
+                  </div>
                 </div>
-              )}
 
-              {/* Tabs: Discover / Joined / Created */}
-              <div className="tbs" id="dt">
-                <div
-                  className={`tb ${dtab === 'd' ? 'a' : ''}`}
-                  onClick={() => setDtab('d')}
-                >
-                  Discover
-                </div>
+                {/* Mobile Categories Horizontal Chip Row: 36px tall */}
+                {isSm && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      overflowX: 'auto',
+                      padding: '8px 0 14px',
+                      scrollbarWidth: 'none',
+                    }}
+                  >
+                    {CATEGORIES.map(cat => {
+                      const isSelected = Boolean(csel[cat]);
+                      return (
+                        <div
+                          key={cat}
+                          style={{
+                            height: 36,
+                            padding: '0 14px',
+                            borderRadius: 18,
+                            background: isSelected ? '#C9B8FF' : '#1e1e22',
+                            color: isSelected ? '#0a0a0a' : '#d4d4d8',
+                            fontSize: 14,
+                            fontWeight: 500,
+                            display: 'flex',
+                            alignItems: 'center',
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer',
+                            flexShrink: 0,
+                          }}
+                          onClick={() => {
+                            if (cat === 'All Categories') setCsel({ 'All Categories': 1 });
+                            else {
+                              setCsel(prev => {
+                                const copy = { ...prev };
+                                delete copy['All Categories'];
+                                if (copy[cat]) delete copy[cat];
+                                else copy[cat] = 1;
+                                if (Object.keys(copy).length === 0) return { 'All Categories': 1 };
+                                return copy;
+                              });
+                            }
+                          }}
+                        >
+                          {cat}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Tabs: Discover / Joined / Created */}
+                <div className="tbs" id="dt" style={{ overflowX: 'auto', flexWrap: 'nowrap', scrollbarWidth: 'none' }}>
+                  <div
+                    className={`tb ${dtab === 'd' ? 'a' : ''}`}
+                    onClick={() => setDtab('d')}
+                  >
+                    Discover
+                  </div>
                 <div
                   className={`tb ${dtab === 'j' ? 'a' : ''}`}
                   onClick={() => setDtab('j')}
@@ -1071,143 +1173,133 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right widget column: 274 CSS px wide, starting 95 CSS px after text column */}
-            <div
-              className="mobile-full"
-              style={{
-                width: isMobile ? '100%' : 274,
-                marginLeft: isMobile ? 0 : 95,
-                flexShrink: 0,
-                marginTop: 4,
-              }}
-            >
-              <div className="nb" onClick={() => navigateTo('new')}>
-                New Campaign
-                <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
-              </div>
-
-              <div className="card" style={{ marginTop: 22, padding: '16px 18px 20px' }}>
-                <div
-                  style={{
-                    height: 38,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0 6px',
-                    fontSize: 18,
-                    fontWeight: 600,
-                  }}
-                >
-                  <span id="cm2">
-                    {MONTHS[calYm[1]]} {calYm[0]}
-                  </span>
-                  <span style={{ display: 'flex', gap: 16, fontSize: 16, color: '#a6a6aa' }}>
-                    <i
-                      className="ti ti-chevron-left"
-                      id="cpv"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => {
-                        setCalYm(([y, m]) => (m === 0 ? [y - 1, 11] : [y, m - 1]));
-                      }}
-                    />
-                    <i
-                      className="ti ti-chevron-right"
-                      id="cnx"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => {
-                        setCalYm(([y, m]) => (m === 11 ? [y + 1, 0] : [y, m + 1]));
-                      }}
-                    />
-                  </span>
+            {/* Right widget column */}
+            <div className="camp-right">
+              {!isBelow900 && (
+                <div className="nb" onClick={() => navigateTo('new')}>
+                  New Campaign
+                  <i className="ti ti-chevron-down" style={{ fontSize: 14 }} />
                 </div>
+              )}
 
-                <div className="cr h">
-                  <span>Su</span>
-                  <span>Mo</span>
-                  <span>Tu</span>
-                  <span>We</span>
-                  <span>Th</span>
-                  <span>Fr</span>
-                  <span>Sa</span>
-                </div>
-
-                <div id="cg">
-                  {calDays.map((row, rIdx) => (
-                    <div className="cr" key={rIdx}>
-                      {row.map((day, cIdx) => (
-                        <span
-                          key={cIdx}
-                          className={`${day.isGray ? 'g' : ''} ${day.isTarget ? 't' : ''}`}
-                        >
-                          {day.text}
-                        </span>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ height: 1, background: '#1f1f22', marginTop: 20 }} />
-                <div
-                  style={{
-                    marginTop: 22,
-                    fontSize: 18,
-                    lineHeight: '26px',
-                    fontWeight: 600,
-                    paddingLeft: 6,
-                  }}
-                >
-                  Categories
-                </div>
-
-                <div id="ct" style={{ marginTop: 8 }}>
-                  {CATEGORIES.map(cat => {
-                    const isSelected = Boolean(csel[cat]);
-                    return (
-                      <div
-                        key={cat}
-                        className="ck"
+              {!isSm && (
+                <div className="card" style={{ marginTop: isBelow900 ? 0 : 22, padding: '16px 18px 20px' }}>
+                  <div
+                    style={{
+                      height: 38,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0 6px',
+                      fontSize: 18,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span id="cm2">
+                      {MONTHS[calYm[1]]} {calYm[0]}
+                    </span>
+                    <span style={{ display: 'flex', gap: 16, fontSize: 16, color: '#a6a6aa' }}>
+                      <i
+                        className="ti ti-chevron-left"
+                        id="cpv"
+                        style={{ cursor: 'pointer' }}
                         onClick={() => {
-                          if (cat === 'All Categories') {
-                            setCsel({ 'All Categories': 1 });
-                          } else {
-                            setCsel(prev => {
-                              const copy = { ...prev };
-                              delete copy['All Categories'];
-                              if (copy[cat]) delete copy[cat];
-                              else copy[cat] = 1;
-                              if (Object.keys(copy).length === 0) {
-                                return { 'All Categories': 1 };
-                              }
-                              return copy;
-                            });
-                          }
+                          setCalYm(([y, m]) => (m === 0 ? [y - 1, 11] : [y, m - 1]));
                         }}
-                      >
-                        <span className={`bx ${isSelected ? 'on' : ''}`}>
-                          {isSelected && <i className="ti ti-check" />}
-                        </span>
-                        <span style={{ color: isSelected ? undefined : '#a6a6aa' }}>
-                          {cat}
-                        </span>
+                      />
+                      <i
+                        className="ti ti-chevron-right"
+                        id="cnx"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => {
+                          setCalYm(([y, m]) => (m === 11 ? [y + 1, 0] : [y, m + 1]));
+                        }}
+                      />
+                    </span>
+                  </div>
+
+                  <div className="cr h">
+                    <span>Su</span>
+                    <span>Mo</span>
+                    <span>Tu</span>
+                    <span>We</span>
+                    <span>Th</span>
+                    <span>Fr</span>
+                    <span>Sa</span>
+                  </div>
+
+                  <div id="cg">
+                    {calDays.map((row, rIdx) => (
+                      <div className="cr" key={rIdx}>
+                        {row.map((day, cIdx) => (
+                          <span
+                            key={cIdx}
+                            className={`${day.isGray ? 'g' : ''} ${day.isTarget ? 't' : ''}`}
+                          >
+                            {day.text}
+                          </span>
+                        ))}
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
+
+                  <div style={{ height: 1, background: '#1f1f22', marginTop: 20 }} />
+                  <div
+                    style={{
+                      marginTop: 22,
+                      fontSize: 18,
+                      lineHeight: '26px',
+                      fontWeight: 600,
+                      paddingLeft: 6,
+                    }}
+                  >
+                    Categories
+                  </div>
+
+                  <div id="ct" style={{ marginTop: 8 }}>
+                    {CATEGORIES.map(cat => {
+                      const isSelected = Boolean(csel[cat]);
+                      return (
+                        <div
+                          key={cat}
+                          className="ck"
+                          onClick={() => {
+                            if (cat === 'All Categories') {
+                              setCsel({ 'All Categories': 1 });
+                            } else {
+                              setCsel(prev => {
+                                const copy = { ...prev };
+                                delete copy['All Categories'];
+                                if (copy[cat]) delete copy[cat];
+                                else copy[cat] = 1;
+                                if (Object.keys(copy).length === 0) {
+                                  return { 'All Categories': 1 };
+                                }
+                                return copy;
+                              });
+                            }
+                          }}
+                        >
+                          <span className={`bx ${isSelected ? 'on' : ''}`}>
+                            {isSelected && <i className="ti ti-check" />}
+                          </span>
+                          <span style={{ color: isSelected ? undefined : '#a6a6aa' }}>
+                            {cat}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
+      </div>
 
         {/* ================= SCREEN 2: EARNINGS (earn) ================= */}
         <div className={`scr ${cur === 'earn' ? 'on' : ''}`} id="earn">
-          <div
-            className="mobile-content"
-            style={{
-              marginLeft: isMobile ? 0 : 368, // rail 350 + 18 inset
-              maxWidth: 787,
-              padding: isMobile ? '16px' : '24px 0 90px',
-            }}
-          >
+          <div className="layout-a-main" style={{ maxWidth: 830 }}>
             <div className="hh" style={{ height: 42 }}>
               <div className="h1">Earnings</div>
               <div
@@ -1238,7 +1330,7 @@ export default function App() {
               <span style={{ fontSize: 15, color: '#a6a6aa' }}>USD in your Stripe balance</span>
             </div>
 
-            <div style={{ display: 'flex', marginTop: 24, height: 96 }} id="est">
+            <div className="stat-grid" id="est" style={{ marginTop: 24 }}>
               <div className="stat">
                 <div className="a1">
                   <i className="ti ti-clock" style={{ fontSize: 16 }} />
@@ -1279,17 +1371,9 @@ export default function App() {
             </div>
             <div className="dv" />
 
-            <div
-              style={{
-                marginTop: 28,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                height: 38,
-              }}
-            >
-              <div className="h2">Performance</div>
+            <div style={{ marginTop: 28 }}>
               <SvgChart
+                title="Performance"
                 config={earnChartConfig}
                 currentKey={earnMetric}
                 onSelectKey={setEarnMetric}
@@ -1308,7 +1392,7 @@ export default function App() {
             <div style={{ marginTop: 16 }}>
               <div className="tr th">
                 <span>Campaign</span>
-                <span className="r">Share</span>
+                <span className="r col-share">Share</span>
                 <span className="r">Subscribers</span>
                 <span className="r">Earned</span>
               </div>
@@ -1328,7 +1412,7 @@ export default function App() {
                   </span>
                   <b style={{ fontWeight: 500, fontSize: 16 }}>Palazzo Lens</b>
                 </span>
-                <span className="r" style={{ color: '#a6a6aa' }}>
+                <span className="r col-share" style={{ color: '#a6a6aa' }}>
                   20%
                 </span>
                 <span className="r">18</span>
@@ -1352,7 +1436,7 @@ export default function App() {
                   </span>
                   <b style={{ fontWeight: 500, fontSize: 16 }}>Tidal</b>
                 </span>
-                <span className="r" style={{ color: '#a6a6aa' }}>
+                <span className="r col-share" style={{ color: '#a6a6aa' }}>
                   25%
                 </span>
                 <span className="r">12</span>
@@ -1376,7 +1460,7 @@ export default function App() {
                   </span>
                   <b style={{ fontWeight: 500, fontSize: 16 }}>Lumen Habit</b>
                 </span>
-                <span className="r" style={{ color: '#a6a6aa' }}>
+                <span className="r col-share" style={{ color: '#a6a6aa' }}>
                   15%
                 </span>
                 <span className="r">6</span>
@@ -1390,208 +1474,175 @@ export default function App() {
 
         {/* ================= SCREEN 3: PROFILE (prof) ================= */}
         <div className={`scr ${cur === 'prof' ? 'on' : ''}`} id="prof">
-          <div
-            className="mobile-content mobile-col"
-            style={{
-              marginLeft: isMobile ? 0 : 368, // rail 350 + 18 inset
-              display: 'flex',
-              minHeight: '100vh',
-              maxWidth: 1040,
-            }}
-          >
-            {/* Center profile card: banner 185 tall, avatar 124, buttons 34 tall radius 10 */}
-            <div
-              className={`pc2 ${isEditingProf ? 'ed' : ''} mobile-full`}
-              id="pf"
-              style={{ width: isMobile ? '100%' : 674 }}
-            >
-              <div className="bn" style={{ height: isMobile ? 120 : undefined }} />
+          <div className="layout-a-main">
+            <div className="prof-flex">
+              {/* Center profile card */}
               <div
-                className="avl"
-                style={{
-                  width: isMobile ? 88 : 124,
-                  height: isMobile ? 88 : 124,
-                  top: isMobile ? 76 : undefined,
-                }}
+                className={`pc2 ${isEditingProf ? 'ed' : ''}`}
+                id="pf"
               >
-                <div
-                  className="fc"
-                  style={{
-                    width: isMobile ? 64 : 86,
-                    height: isMobile ? 64 : 86,
-                  }}
-                >
-                  <b />
-                  <b />
-                </div>
-              </div>
-
-              <div
-                className="pbt"
-                style={{
-                  top: isMobile ? 130 : undefined,
-                }}
-              >
-                {!isEditingProf ? (
-                  <>
-                    <div
-                      className="pb nn"
-                      id="bset"
-                      onClick={() => setSettingsModalOpen(true)}
-                    >
-                      Settings
-                    </div>
-                    <div
-                      className="pb nn"
-                      id="bed"
-                      onClick={() => setIsEditingProf(true)}
-                    >
-                      Edit Profile
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div
-                      className="pb cn2 ne"
-                      id="bcn"
-                      onClick={() => setIsEditingProf(false)}
-                    >
-                      Cancel
-                    </div>
-                    <div
-                      className="pb sv ne"
-                      id="bsv"
-                      onClick={() => {
-                        const full = `${editFirstName} ${editLastName}`.trim();
-                        setProfName(full || 'Maya Chen');
-                        setIsEditingProf(false);
-                      }}
-                    >
-                      Save
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div
-                className="inf"
-                style={{
-                  top: isMobile ? 180 : undefined,
-                }}
-              >
-                <div className="nmx">
-                  {!isEditingProf ? (
-                    <span className="nn" id="nmt">
-                      {profName}
-                    </span>
-                  ) : (
-                    <span className="ne">
-                      <input
-                        className="fe"
-                        style={{ width: 120, background: 'transparent', color: '#fff' }}
-                        value={editFirstName}
-                        onChange={e => setEditFirstName(e.target.value)}
-                      />
-                      <input
-                        className="fe"
-                        style={{ width: 120, background: 'transparent', color: '#fff' }}
-                        value={editLastName}
-                        onChange={e => setEditLastName(e.target.value)}
-                      />
-                    </span>
-                  )}
-                </div>
-                <div className="hd3">maya</div>
-
-                <div className="r3">
-                  {!isEditingProf ? (
-                    <span className="nn" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <i className="ti ti-link" style={{ fontSize: 16, color: '#bdbdc1' }} />
-                      {editDesc || 'Instagram and 1 more'}
-                    </span>
-                  ) : (
-                    <span className="ne">
-                      <input
-                        className="di"
-                        placeholder="Add a description…"
-                        value={editDesc}
-                        onChange={e => setEditDesc(e.target.value)}
-                      />
-                    </span>
-                  )}
-                </div>
-
-                <div className="r4">
-                  {!isEditingProf ? (
-                    <span className="nn" style={{ display: 'flex', gap: 14 }}>
-                      <span>
-                        <b>18</b> subscribers
-                      </span>
-                      <span>
-                        <b>3</b> campaigns
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="ne" style={{ fontWeight: 600, color: '#fff' }}>
-                      Edit Social Links
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right requests panel: 325 CSS px wide */}
-            <div
-              className="rq mobile-full"
-              style={{ width: isMobile ? '100%' : 325, marginTop: isMobile ? 160 : 0 }}
-            >
-              <div className="rqh">
-                <span>Requests</span>
-                <i className="ti ti-filter" style={{ fontSize: 18, color: '#bdbdc1' }} />
-              </div>
-              <div className="rr">
-                <div
-                  className="tl"
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 8,
-                    background: '#e4d8ff',
-                    fontSize: 18,
-                  }}
-                >
-                  <i className="ti ti-aperture" />
-                </div>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 600, lineHeight: '22px' }}>
-                    Palazzo Lens
+                <div className="bn" />
+                <div className="avl">
+                  <div className="fc">
+                    <b />
+                    <b />
                   </div>
-                  <div style={{ fontSize: 14, color: '#8d8d92' }}>Oct 24</div>
                 </div>
-                <span className="pill l" style={{ marginLeft: 'auto' }}>
-                  Approved
-                </span>
+
+                <div className="pbt">
+                  {!isEditingProf ? (
+                    <>
+                      <div
+                        className="pb nn"
+                        id="bset"
+                        onClick={() => setSettingsModalOpen(true)}
+                      >
+                        Settings
+                      </div>
+                      <div
+                        className="pb nn"
+                        id="bed"
+                        onClick={() => setIsEditingProf(true)}
+                      >
+                        Edit Profile
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className="pb cn2 ne"
+                        id="bcn"
+                        onClick={() => setIsEditingProf(false)}
+                      >
+                        Cancel
+                      </div>
+                      <div
+                        className="pb sv ne"
+                        id="bsv"
+                        onClick={() => {
+                          const full = `${editFirstName} ${editLastName}`.trim();
+                          setProfName(full || 'Maya Chen');
+                          setIsEditingProf(false);
+                        }}
+                      >
+                        Save
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="inf">
+                  <div className="nmx">
+                    {!isEditingProf ? (
+                      <span className="nn" id="nmt">
+                        {profName}
+                      </span>
+                    ) : (
+                      <span className="ne">
+                        <input
+                          className="fe"
+                          style={{ width: 120, background: 'transparent', color: '#fff' }}
+                          value={editFirstName}
+                          onChange={e => setEditFirstName(e.target.value)}
+                        />
+                        <input
+                          className="fe"
+                          style={{ width: 120, background: 'transparent', color: '#fff' }}
+                          value={editLastName}
+                          onChange={e => setEditLastName(e.target.value)}
+                        />
+                      </span>
+                    )}
+                  </div>
+                  <div className="hd3">maya</div>
+
+                  <div className="r3">
+                    {!isEditingProf ? (
+                      <span className="nn" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <i className="ti ti-link" style={{ fontSize: 16, color: '#bdbdc1' }} />
+                        {editDesc || 'Instagram and 1 more'}
+                      </span>
+                    ) : (
+                      <span className="ne">
+                        <input
+                          className="di"
+                          placeholder="Add a description…"
+                          value={editDesc}
+                          onChange={e => setEditDesc(e.target.value)}
+                        />
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="r4">
+                    {!isEditingProf ? (
+                      <span className="nn" style={{ display: 'flex', gap: 14 }}>
+                        <span>
+                          <b>18</b> subscribers
+                        </span>
+                        <span>
+                          <b>3</b> campaigns
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="ne" style={{ fontWeight: 600, color: '#fff' }}>
+                        Edit Social Links
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="rr">
-                <div
-                  className="tl"
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 8,
-                    background: '#cfe8dc',
-                    fontSize: 18,
-                  }}
-                >
-                  <i className="ti ti-wave-sine" />
+
+              {/* Right requests panel */}
+              <div className="rq">
+                <div className="rqh">
+                  <span>Requests</span>
+                  <i className="ti ti-filter" style={{ fontSize: 18, color: '#bdbdc1' }} />
                 </div>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 600, lineHeight: '22px' }}>Tidal</div>
-                  <div style={{ fontSize: 14, color: '#8d8d92' }}>Oct 26</div>
+                <div className="rr">
+                  <div
+                    className="tl"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      background: '#e4d8ff',
+                      fontSize: 18,
+                    }}
+                  >
+                    <i className="ti ti-aperture" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 600, lineHeight: '22px' }}>
+                      Palazzo Lens
+                    </div>
+                    <div style={{ fontSize: 14, color: '#8d8d92' }}>Oct 24</div>
+                  </div>
+                  <span className="pill l" style={{ marginLeft: 'auto' }}>
+                    Approved
+                  </span>
                 </div>
-                <span className="pill" style={{ marginLeft: 'auto' }}>
-                  Pending
-                </span>
+                <div className="rr">
+                  <div
+                    className="tl"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 8,
+                      background: '#cfe8dc',
+                      fontSize: 18,
+                    }}
+                  >
+                    <i className="ti ti-wave-sine" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 600, lineHeight: '22px' }}>Tidal</div>
+                    <div style={{ fontSize: 14, color: '#8d8d92' }}>Oct 26</div>
+                  </div>
+                  <span className="pill" style={{ marginLeft: 'auto' }}>
+                    Pending
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -1599,17 +1650,10 @@ export default function App() {
 
         {/* ================= SCREEN 4: PERSONAL (pers) ================= */}
         <div className={`scr ${cur === 'pers' ? 'on' : ''}`} id="pers">
-          <div
-            className="mobile-content"
-            style={{
-              marginLeft: isMobile ? 0 : 368, // rail 350 + 18 inset
-              paddingBottom: 90,
-              maxWidth: 787,
-            }}
-          >
+          <div className="layout-a-main" style={{ maxWidth: 830 }}>
             <div className="hd">Personal</div>
 
-            <div className="tabs" id="pt">
+            <div className="tabs" id="pt" style={{ overflowX: 'auto', flexWrap: 'nowrap', scrollbarWidth: 'none' }}>
               {(
                 [
                   ['c', 'Campaigns'],
@@ -1629,7 +1673,7 @@ export default function App() {
               ))}
             </div>
 
-            <div className="col" style={{ marginLeft: 18, width: '100%', maxWidth: 787, padding: '24px 0 90px' }}>
+            <div className="col" style={{ width: '100%', maxWidth: 830, padding: '24px 0 90px' }}>
               {/* TAB c: Campaigns */}
               {ptab === 'c' && (
                 <div className="pn" data-p="c">
@@ -2010,7 +2054,7 @@ export default function App() {
                   </div>
 
                   {/* 4 Stat Boxes */}
-                  <div style={{ display: 'flex', marginTop: 26, height: 96 }} id="ist4">
+                  <div className="stat-grid" id="ist4" style={{ marginTop: 26 }}>
                     {isLive ? (
                       <>
                         <div className="stat">
@@ -2104,17 +2148,9 @@ export default function App() {
                   </div>
                   <div className="dv" />
 
-                  <div
-                    style={{
-                      marginTop: 28,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      height: 38,
-                    }}
-                  >
-                    <div className="h2">Performance</div>
+                  <div style={{ marginTop: 28 }}>
                     <SvgChart
+                      title="Performance"
                       config={insightChartConfig}
                       currentKey={insightMetric}
                       onSelectKey={setInsightMetric}
@@ -2281,112 +2317,254 @@ export default function App() {
 
         {/* ---------------- SCREEN 5: CAMPAIGN DETAIL (camp) ---------------- */}
         <div className={`scr ${cur === 'camp' ? 'on' : ''}`} id="camp">
-          {/* Mobile Top bar with back arrow */}
-          {isMobile ? (
-            <div className="mobile-topbar">
-              <i className="ti ti-arrow-left" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => navigateTo('disc')} />
-              <span style={{ fontSize: 17, fontWeight: 600 }}>Palazzo Lens</span>
+          <div className="layout-b-main">
+            <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18, cursor: 'pointer' }}>
+              <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+              Back
             </div>
-          ) : null}
 
-          <div
-            className="mobile-content"
-            style={{
-              maxWidth: 929, // 1161 ÷ 1.25 = 929 CSS px
-              margin: '0 auto',
-              padding: isMobile ? '16px 16px 90px' : '29px 0 100px', // Top spacing: 29 CSS px
-            }}
-          >
-            {!isMobile && (
-              <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18 }}>
-                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
-                Back
+            {/* Layout at >= 900: two columns 330px + 32px gap + 566px */}
+            {!isBelow900 ? (
+              <div style={{ display: 'flex', gap: 32 }}>
+                <div style={{ width: 330, flexShrink: 0 }}>
+                  <div
+                    className="tl"
+                    style={{
+                      width: 330,
+                      height: 330,
+                      borderRadius: 18,
+                      background: '#e4d8ff',
+                      border: '1px solid #2a2a2e',
+                      fontSize: 130,
+                    }}
+                  >
+                    <i className="ti ti-aperture" />
+                  </div>
+
+                  <div style={{ marginTop: 32, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span
+                      className="av"
+                      style={{ width: 34, height: 34, background: '#f4c4d8' }}
+                    >
+                      <b />
+                      <b />
+                    </span>
+                    <div>
+                      <div style={{ fontSize: 13.5, lineHeight: '16px', color: '#8d8d92' }}>
+                        Presented by
+                      </div>
+                      <div className="t1" style={{ fontSize: 16 }}>Maya Chen</div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 12,
+                      fontSize: 15,
+                      lineHeight: '22px',
+                      color: '#9a9a9f',
+                    }}
+                  >
+                    Photo editing tools for creators, built in Addis Ababa.
+                  </div>
+
+                  <div className="lb" style={{ marginTop: 26 }}>
+                    Founder
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      height: 44,
+                      marginTop: 10,
+                    }}
+                  >
+                    <span
+                      className="av"
+                      style={{ width: 28, height: 28, background: '#f4c4d8', gap: 3 }}
+                    >
+                      <b style={{ width: 4, height: 8 }} />
+                      <b style={{ width: 4, height: 8 }} />
+                    </span>
+                    <span className="t1" style={{ fontSize: 15 }}>Maya Chen</span>
+                    <span
+                      style={{
+                        marginLeft: 'auto',
+                        display: 'flex',
+                        gap: 12,
+                        fontSize: 18,
+                        color: '#8d8d92',
+                      }}
+                    >
+                      <i className="ti ti-brand-instagram" />
+                      <i className="ti ti-brand-x" />
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ width: 566, flexShrink: 0 }}>
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      height: 30,
+                      padding: '0 10px 0 6px',
+                      borderRadius: 8,
+                      border: '1px solid #242427',
+                      fontSize: 14,
+                      color: '#8d8d92',
+                    }}
+                  >
+                    <i className="ti ti-apps" style={{ fontSize: 16, color: '#d8d8dc' }} />
+                    Featured in <span style={{ color: '#fff', fontWeight: 500 }}>Photo and video</span>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      fontSize: 44,
+                      lineHeight: '54px',
+                      fontWeight: 600,
+                      letterSpacing: -0.8,
+                    }}
+                  >
+                    Palazzo Lens
+                  </div>
+
+                  <div style={{ marginTop: 16 }} className="row2">
+                    <div className="tile">
+                      <i className="ti ti-percentage" />
+                    </div>
+                    <div>
+                      <div className="t1">20% of subscription revenue</div>
+                      <div className="t2">First payment plus 6 months of renewals</div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 18 }} className="row2">
+                    <div className="tile">
+                      <i className="ti ti-calendar" />
+                    </div>
+                    <div>
+                      <div className="t1">Oct 27 – Nov 27</div>
+                      <div className="t2">Ends in 31 days</div>
+                    </div>
+                  </div>
+
+                  {/* Join Purple Card */}
+                  <div
+                    style={{
+                      marginTop: 26,
+                      borderRadius: 'var(--radius-card)',
+                      overflow: 'hidden',
+                      background: '#C9B8FF',
+                      color: '#17141f',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: 38,
+                        background: '#b9a5f2',
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '0 18px',
+                        fontSize: 15,
+                        fontWeight: 500,
+                        color: '#3a3158',
+                      }}
+                    >
+                      Join
+                    </div>
+                    <div style={{ padding: '18px' }}>
+                      <div id="jt" style={{ fontSize: 20, lineHeight: '26px', fontWeight: 600 }}>
+                        {joinRequested ? 'Request sent' : 'Request to join'}
+                      </div>
+                      <div
+                        id="jd"
+                        style={{ marginTop: 4, fontSize: 14.5, lineHeight: '22px', color: '#3a3158' }}
+                      >
+                        {joinRequested
+                          ? 'Waiting for the founder to approve you. We’ll notify you when it’s done.'
+                          : 'The founder approves each creator. Once approved, you claim your own link, QR code and creator code and earn 20% of every subscription payment.'}
+                      </div>
+                      <div
+                        id="jb"
+                        className="btn bk"
+                        style={{ marginTop: 16, width: '100%', height: 42, fontSize: 16 }}
+                        onClick={() => setJoinRequested(!joinRequested)}
+                      >
+                        {joinRequested ? 'Requested' : 'Request to join'}
+                      </div>
+                      {joinRequested && (
+                        <div
+                          id="ja"
+                          style={{
+                            marginTop: 10,
+                            textAlign: 'center',
+                            fontSize: 14,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                          }}
+                          onClick={() => navigateTo('join')}
+                        >
+                          Preview as approved
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="lb" style={{ marginTop: 34 }}>
+                    About Campaign
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 16,
+                      fontSize: 16,
+                      lineHeight: '25px',
+                      color: '#e4e4e6',
+                    }}
+                  >
+                    Palazzo Lens turns ordinary shots into polished portraits in seconds. Creators
+                    earn a share of every subscription they bring in, with no minimum audience and no
+                    exclusivity.
+                  </div>
+
+                  <div className="lb" style={{ marginTop: 28 }}>
+                    Get the app
+                  </div>
+                  <div className="sr2">
+                    <div className="stt">
+                      <i className="ti ti-brand-apple" />
+                    </div>
+                    <div className="t1">App Store</div>
+                    <i
+                      className="ti ti-arrow-up-right"
+                      style={{ marginLeft: 'auto', fontSize: 18, color: '#8d8d92' }}
+                    />
+                  </div>
+                </div>
               </div>
-            )}
-
-            {/* Columns: 330 CSS px (413 ÷ 1.25) + 32 CSS px gap + 566 CSS px (708 ÷ 1.25) */}
-            <div className="mobile-col" style={{ display: 'flex', gap: 32 }}>
-              <div
-                className="mobile-full"
-                style={{ width: isMobile ? '100%' : 330, flexShrink: 0 }}
-              >
+            ) : (
+              /* Single column below 900. Order: cover, title, info rows, request card, about, store rows */
+              <div style={{ width: '100%' }}>
+                {/* 1. Cover full-width square */}
                 <div
-                  className="tl mobile-cover"
+                  className="tl full-cover-square"
                   style={{
-                    width: isMobile ? '100%' : 330,
-                    height: isMobile ? 330 : 330,
                     borderRadius: 18,
                     background: '#e4d8ff',
                     border: '1px solid #2a2a2e',
-                    fontSize: 130,
+                    fontSize: isSm ? 90 : 130,
+                    margin: '0 auto',
                   }}
                 >
                   <i className="ti ti-aperture" />
                 </div>
 
-                <div style={{ marginTop: 32, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span
-                    className="av"
-                    style={{ width: 34, height: 34, background: '#f4c4d8' }}
-                  >
-                    <b />
-                    <b />
-                  </span>
-                  <div>
-                    <div style={{ fontSize: 13.5, lineHeight: '16px', color: '#8d8d92' }}>
-                      Presented by
-                    </div>
-                    <div className="t1" style={{ fontSize: 16 }}>Maya Chen</div>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    fontSize: 15,
-                    lineHeight: '22px',
-                    color: '#9a9a9f',
-                  }}
-                >
-                  Photo editing tools for creators, built in Addis Ababa.
-                </div>
-
-                <div className="lb" style={{ marginTop: 26 }}>
-                  Founder
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    height: 44,
-                    marginTop: 10,
-                  }}
-                >
-                  <span
-                    className="av"
-                    style={{ width: 28, height: 28, background: '#f4c4d8', gap: 3 }}
-                  >
-                    <b style={{ width: 4, height: 8 }} />
-                    <b style={{ width: 4, height: 8 }} />
-                  </span>
-                  <span className="t1" style={{ fontSize: 15 }}>Maya Chen</span>
-                  <span
-                    style={{
-                      marginLeft: 'auto',
-                      display: 'flex',
-                      gap: 12,
-                      fontSize: 18,
-                      color: '#8d8d92',
-                    }}
-                  >
-                    <i className="ti ti-brand-instagram" />
-                    <i className="ti ti-brand-x" />
-                  </span>
-                </div>
-              </div>
-
-              <div className="mobile-full" style={{ width: isMobile ? '100%' : 566, flexShrink: 0 }}>
+                {/* 2. Title and category */}
                 <div
                   style={{
                     display: 'inline-flex',
@@ -2398,6 +2576,7 @@ export default function App() {
                     border: '1px solid #242427',
                     fontSize: 14,
                     color: '#8d8d92',
+                    marginTop: 20,
                   }}
                 >
                   <i className="ti ti-apps" style={{ fontSize: 16, color: '#d8d8dc' }} />
@@ -2406,16 +2585,17 @@ export default function App() {
 
                 <div
                   style={{
-                    marginTop: 14,
-                    fontSize: isMobile ? 32 : 44,
-                    lineHeight: isMobile ? '38px' : '54px',
+                    marginTop: 12,
+                    fontSize: isSm ? 30 : 38,
+                    lineHeight: isSm ? '36px' : '46px',
                     fontWeight: 600,
-                    letterSpacing: -0.8,
+                    letterSpacing: -0.6,
                   }}
                 >
                   Palazzo Lens
                 </div>
 
+                {/* 3. Info rows */}
                 <div style={{ marginTop: 16 }} className="row2">
                   <div className="tile">
                     <i className="ti ti-percentage" />
@@ -2426,7 +2606,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 18 }} className="row2">
+                <div style={{ marginTop: 14 }} className="row2">
                   <div className="tile">
                     <i className="ti ti-calendar" />
                   </div>
@@ -2436,10 +2616,10 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Join Purple Card */}
+                {/* 4. Request Card with 48px full-width button on sm */}
                 <div
                   style={{
-                    marginTop: 26,
+                    marginTop: 24,
                     borderRadius: 'var(--radius-card)',
                     overflow: 'hidden',
                     background: '#C9B8FF',
@@ -2474,8 +2654,8 @@ export default function App() {
                     </div>
                     <div
                       id="jb"
-                      className="btn bk"
-                      style={{ marginTop: 16, width: '100%', height: 42, fontSize: 16 }}
+                      className="btn bk layout-b-action-btn"
+                      style={{ marginTop: 16 }}
                       onClick={() => setJoinRequested(!joinRequested)}
                     >
                       {joinRequested ? 'Requested' : 'Request to join'}
@@ -2499,12 +2679,13 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="lb" style={{ marginTop: 34 }}>
+                {/* 5. About */}
+                <div className="lb" style={{ marginTop: 28 }}>
                   About Campaign
                 </div>
                 <div
                   style={{
-                    marginTop: 16,
+                    marginTop: 12,
                     fontSize: 16,
                     lineHeight: '25px',
                     color: '#e4e4e6',
@@ -2515,7 +2696,8 @@ export default function App() {
                   exclusivity.
                 </div>
 
-                <div className="lb" style={{ marginTop: 28 }}>
+                {/* 6. Store rows */}
+                <div className="lb" style={{ marginTop: 24 }}>
                   Get the app
                 </div>
                 <div className="sr2">
@@ -2528,35 +2710,35 @@ export default function App() {
                     style={{ marginLeft: 'auto', fontSize: 18, color: '#8d8d92' }}
                   />
                 </div>
+
+                {/* 7. Founder & presentation */}
+                <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span
+                    className="av"
+                    style={{ width: 34, height: 34, background: '#f4c4d8' }}
+                  >
+                    <b />
+                    <b />
+                  </span>
+                  <div>
+                    <div style={{ fontSize: 13.5, lineHeight: '16px', color: '#8d8d92' }}>
+                      Presented by
+                    </div>
+                    <div className="t1" style={{ fontSize: 16 }}>Maya Chen</div>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
         {/* ---------------- SCREEN 6: CREATOR CLAIM & ANALYTICS (join) ---------------- */}
         <div className={`scr ${cur === 'join' ? 'on' : ''}`} id="join">
-          {/* Mobile Top bar */}
-          {isMobile ? (
-            <div className="mobile-topbar">
-              <i className="ti ti-arrow-left" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => navigateTo('disc')} />
-              <span style={{ fontSize: 17, fontWeight: 600 }}>Your link and code</span>
+          <div className="layout-b-main" style={{ maxWidth: 700 }}>
+            <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18, cursor: 'pointer' }}>
+              <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+              Back to campaigns
             </div>
-          ) : null}
-
-          <div
-            className="mobile-content"
-            style={{
-              maxWidth: 656, // 820 ÷ 1.25 = 656 CSS px centered
-              margin: '0 auto',
-              padding: isMobile ? '16px 16px 90px' : '29px 0 90px',
-            }}
-          >
-            {!isMobile && (
-              <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18 }}>
-                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
-                Back to campaigns
-              </div>
-            )}
 
             <div
               style={{
@@ -2608,11 +2790,11 @@ export default function App() {
             {/* Expandable Link/Code Box */}
             <div className="xp" id="xp" style={{ height: codeClaimed ? 'auto' : 58 }}>
               {!codeClaimed ? (
-                <div className="cbtn" id="cb" onClick={handleClaimCode}>
+                <div className="cbtn layout-b-action-btn" id="cb" onClick={handleClaimCode}>
                   {claimingLoading ? 'Claiming…' : 'Claim code'}
                 </div>
               ) : (
-                <div className="inn" id="inn" style={{ flexDirection: isMobile ? 'column' : 'row' }}>
+                <div className="inn" id="inn" style={{ flexDirection: isBelow900 ? 'column' : 'row' }}>
                   <div
                     style={{
                       flex: 1,
@@ -2697,7 +2879,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="qc">
+                  <div className="qc" style={{ width: isBelow900 ? '100%' : 200, maxWidth: isBelow900 ? '100%' : 200 }}>
                     <div style={{ fontSize: 13.5, color: '#a6a6aa' }}>Scan with your phone</div>
                     <div className="qf">
                       <i className="cn a" />
@@ -2724,17 +2906,9 @@ export default function App() {
 
             <div className="dv" style={{ marginTop: 36 }} />
 
-            <div
-              style={{
-                marginTop: 28,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                height: 38,
-              }}
-            >
-              <div className="h2">Analytics</div>
+            <div style={{ marginTop: 28 }}>
               <SvgChart
+                title="Analytics"
                 config={joinChartConfig}
                 currentKey={joinMetric}
                 onSelectKey={setJoinMetric}
@@ -2742,7 +2916,7 @@ export default function App() {
             </div>
 
             {/* 4 Analytics Stat Tiles */}
-            <div style={{ display: 'flex', marginTop: 20, height: 86 }} id="js4">
+            <div className="stat-grid" id="js4" style={{ marginTop: 20 }}>
               <div className="stat">
                 <div className="a1">Link clicks</div>
                 <div
@@ -2841,43 +3015,27 @@ export default function App() {
 
         {/* ---------------- SCREEN 7: CREATE CAMPAIGN (new) ---------------- */}
         <div className={`scr ${cur === 'new' ? 'on' : ''}`} id="new">
-          {/* Mobile Top bar */}
-          {isMobile ? (
-            <div className="mobile-topbar">
-              <i className="ti ti-arrow-left" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => navigateTo('disc')} />
-              <span style={{ fontSize: 17, fontWeight: 600 }}>New Campaign</span>
+          <div className="layout-b-main">
+            <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18, cursor: 'pointer' }}>
+              <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+              Cancel
             </div>
-          ) : null}
-
-          <div
-            className="mobile-content"
-            style={{
-              maxWidth: 929, // 1161 ÷ 1.25 = 929 CSS px
-              margin: '0 auto',
-              padding: isMobile ? '16px 16px 90px' : '29px 0 100px',
-            }}
-          >
-            {!isMobile && (
-              <div className="bkl" onClick={() => navigateTo('disc')} style={{ height: 32, marginBottom: 18 }}>
-                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
-                Cancel
-              </div>
-            )}
 
             {/* 330 CSS px cover (radius 18) + 32 gap + 566 CSS px form */}
-            <div className="mobile-col" style={{ display: 'flex', gap: 32 }}>
-              <div style={{ width: isMobile ? '100%' : 330, flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexDirection: isBelow900 ? 'column' : 'row', gap: 32 }}>
+              <div style={{ width: isBelow900 ? '100%' : 330, flexShrink: 0 }}>
                 <div
-                  className="tl mobile-cover"
+                  className={`tl ${isBelow900 ? 'full-cover-square' : ''}`}
                   style={{
                     position: 'relative',
-                    width: isMobile ? '100%' : 330,
-                    height: isMobile ? 330 : 330, // cover is 330x330, radius 18
+                    width: isBelow900 ? '100%' : 330,
+                    height: isBelow900 ? 'auto' : 330,
                     borderRadius: 18,
                     border: '1px solid #2a2a2e',
                     background: '#141416',
                     color: '#5d5d62',
                     fontSize: 52,
+                    margin: isBelow900 ? '0 auto' : undefined,
                   }}
                 >
                   <i className="ti ti-photo" />
@@ -2903,7 +3061,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mobile-full" style={{ width: isMobile ? '100%' : 566, flexShrink: 0, position: 'relative' }}>
+              <div style={{ width: isBelow900 ? '100%' : 566, flexShrink: 0, position: 'relative' }}>
                 <input
                   id="nm"
                   placeholder="Campaign Name"
@@ -3026,8 +3184,9 @@ export default function App() {
                     id="cpp"
                     className="pop on"
                     style={{
-                      left: 100,
+                      left: isSm ? 16 : isBelow900 ? 20 : 100,
                       top: 110,
+                      maxWidth: 'calc(100vw - 32px)',
                     }}
                     onClick={e => e.stopPropagation()}
                   >
@@ -3204,32 +3363,15 @@ export default function App() {
 
         {/* ---------------- SCREEN 8: WITHDRAW (wd) ---------------- */}
         <div className={`scr ${cur === 'wd' ? 'on' : ''}`} id="wd">
-          {/* Mobile Top bar */}
-          {isMobile ? (
-            <div className="mobile-topbar">
-              <i className="ti ti-arrow-left" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => navigateTo('earn')} />
-              <span style={{ fontSize: 17, fontWeight: 600 }}>Withdraw</span>
+          <div className="layout-b-main">
+            <div className="bkl" onClick={() => navigateTo('earn')} style={{ height: 32, marginBottom: 18, cursor: 'pointer' }}>
+              <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
+              Back to earnings
             </div>
-          ) : null}
-
-          <div
-            className="mobile-content"
-            style={{
-              maxWidth: 929, // 1161 ÷ 1.25 = 929 CSS px
-              margin: '0 auto',
-              padding: isMobile ? '16px 16px 90px' : '29px 0 100px',
-            }}
-          >
-            {!isMobile && (
-              <div className="bkl" onClick={() => navigateTo('earn')} style={{ height: 32, marginBottom: 18 }}>
-                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} />
-                Back to earnings
-              </div>
-            )}
 
             {!withdrawDone ? (
-              <div id="f1" className="mobile-col" style={{ display: 'flex', gap: 32 }}>
-                <div style={{ width: isMobile ? '100%' : 330, flexShrink: 0 }}>
+              <div id="f1" style={{ display: 'flex', flexDirection: isBelow900 ? 'column' : 'row', gap: 32 }}>
+                <div style={{ width: isBelow900 ? '100%' : 330, flexShrink: 0 }}>
                   <div style={{ fontSize: 27, lineHeight: '36px', fontWeight: 600 }}>
                     Withdraw
                   </div>
@@ -3287,7 +3429,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="mobile-full" style={{ width: isMobile ? '100%' : 566, flexShrink: 0 }}>
+                <div style={{ width: isBelow900 ? '100%' : 566, flexShrink: 0 }}>
                   <div className="h2">Pay out to</div>
                   <div className="sub" style={{ marginTop: 2 }}>
                     Choose a card or add a new one.
@@ -3571,7 +3713,7 @@ export default function App() {
             <span style={{ fontSize: 16, fontWeight: 600 }}>Developer</span>
           </div>
 
-          <div className="dsd" style={{ display: isMobile ? 'none' : 'block' }}>
+          <div className="dsd" style={{ display: isBelow900 ? 'none' : 'block' }}>
             <div
               className="bkl"
               style={{
@@ -3612,8 +3754,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Mobile Top Tabs for Developer */}
-          {isMobile && (
+          {/* Top Tabs for Developer below 900 */}
+          {isBelow900 && (
             <div style={{ display: 'flex', borderBottom: '1px solid #1f1f22', background: '#0a0a0a' }}>
               <div
                 style={{
@@ -3652,13 +3794,13 @@ export default function App() {
             </div>
           )}
 
-          {/* Content: 688 CSS px, starts 292 after sidebar (246 + 46 = ~292 offset) */}
+          {/* Content: max 760, starts 292 after sidebar at >= 900 */}
           <div
             className="mobile-content"
             style={{
-              marginLeft: isMobile ? 0 : 292,
-              maxWidth: 688,
-              padding: isMobile ? '16px 16px 90px' : '36px 0 100px',
+              marginLeft: isBelow900 ? 0 : 292,
+              maxWidth: isBelow900 ? '100%' : 760,
+              padding: isSm ? '16px 16px 90px' : '36px 20px 100px',
             }}
           >
             {devTab === 'asc' && (
@@ -3918,7 +4060,7 @@ export default function App() {
         <div id="np">
           <div className="nt" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>Notifications</span>
-            {isMobile && (
+            {isBelow900 && (
               <i className="ti ti-x" style={{ fontSize: 20, cursor: 'pointer' }} onClick={() => setNotifOpen(false)} />
             )}
           </div>
