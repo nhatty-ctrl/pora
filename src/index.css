@@ -129,10 +129,14 @@ html, body, #root {
 #s .it.a { background: #1d1d1f; color: #fff; }
 #s .it i { font-size: 19px; }
 
-/* When notifications are open: Rail collapses to square icon tiles (72px) */
+/* When notifications are open: Rail collapses to clean icon tiles (72px) */
 #s.nc .rail {
   width: var(--w-rail-collapsed);
-  border-right: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+#s.nc .rail svg.rail-logo {
+  left: 50% !important;
+  transform: translateX(-50%);
 }
 #s.nc .it span.t { display: none; }
 #s.nc .it {
@@ -142,29 +146,30 @@ html, body, #root {
   width: 44px;
   height: 44px;
   padding: 0;
-  margin: 0 auto 8px;
-  border-radius: 8px;
-  background: #141417;
-  border: 1px solid #232328;
-  color: #a1a1aa;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: #8d8d92;
   transition: all 0.15s ease;
 }
 #s.nc .it:hover {
-  background: #1e1e23;
-  border-color: #383842;
+  background: #1a1a1d;
   color: #fff;
+  border-radius: 50%;
 }
 #s.nc .it.a {
-  background: #25252d;
-  border-color: #C9B8FF;
+  background: #222227;
   color: #fff;
-  box-shadow: 0 0 0 1px rgba(201, 184, 255, 0.2);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(201, 184, 255, 0.35);
 }
 #s.nc .it .av {
-  border-radius: 4px;
+  border-radius: 50%;
+  overflow: hidden;
 }
 
-/* Bottom More menu button in square mode */
+/* Bottom More menu button in collapsed mode */
 #s .rail-more {
   position: absolute;
   left: 10px;
@@ -184,20 +189,21 @@ html, body, #root {
   height: 44px;
   padding: 0;
   justify-content: center;
-  border-radius: 8px;
-  background: #141417;
-  border: 1px solid #232328;
-  color: #a1a1aa;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: #8d8d92;
+  transition: all 0.15s ease;
 }
 #s.nc .rail-more:hover {
-  background: #1e1e23;
-  border-color: #383842;
+  background: #1a1a1d;
   color: #fff;
+  border-radius: 50%;
 }
 #s.nc .rail-more.a {
-  background: #25252d;
-  border-color: #C9B8FF;
+  background: #222227;
   color: #fff;
+  border-radius: 50%;
 }
 #s.nc .rail-more span.t { display: none; }
 
@@ -264,6 +270,37 @@ html, body, #root {
 #s .pr:hover { background: #d8cbff; color: #0a0a0a; }
 #s .bk { background: #0a0a0a; color: #f4f1ea; border: 1px solid #2a2a2e; }
 #s .bk:hover { background: #151516; color: #fff; }
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+#s .btn.loading,
+#s .cbtn.loading,
+#s .pb.loading,
+#s .mb.loading {
+  opacity: 0.82;
+  cursor: wait !important;
+  pointer-events: none !important;
+}
+
+#s .btn:disabled,
+#s .btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
 
 /* Status pill - solid color badges */
 #s .pill {
@@ -1281,7 +1318,11 @@ html, body, #root {
     padding: 0 !important;
     margin: 0 auto 4px !important;
     justify-content: center !important;
-    border-radius: 10px;
+    border-radius: 50% !important;
+  }
+  #s .it:hover,
+  #s .it.a {
+    border-radius: 50% !important;
   }
   #s .it span.t { display: none !important; }
   #s .rail-more {
@@ -1291,6 +1332,11 @@ html, body, #root {
     height: 44px !important;
     padding: 0 !important;
     justify-content: center !important;
+    border-radius: 50% !important;
+  }
+  #s .rail-more:hover,
+  #s .rail-more.a {
+    border-radius: 50% !important;
   }
   #s .rail-more span.t { display: none !important; }
   #s .rail > svg {
@@ -1366,7 +1412,11 @@ html, body, #root {
     padding: 0 !important;
     margin: 0 auto 4px !important;
     justify-content: center !important;
-    border-radius: 10px;
+    border-radius: 50% !important;
+  }
+  #s .it:hover,
+  #s .it.a {
+    border-radius: 50% !important;
   }
   #s .it span.t { display: none !important; }
   #s .rail-more {
@@ -1376,6 +1426,11 @@ html, body, #root {
     height: 44px !important;
     padding: 0 !important;
     justify-content: center !important;
+    border-radius: 50% !important;
+  }
+  #s .rail-more:hover,
+  #s .rail-more.a {
+    border-radius: 50% !important;
   }
   #s .rail-more span.t { display: none !important; }
   #s .rail > svg {
@@ -1655,25 +1710,213 @@ html, body, #root {
   }
 }
 
-/* Earnings Page layout: controlled, proportional, leaving just a little balanced space on the right */
-#earn .layout-a-main {
+/* Earnings & Joined Page layout: controlled, proportional, leaving just a little balanced space on the right */
+#earn .layout-a-main,
+#join .layout-a-main {
   max-width: 1040px !important;
   width: 100% !important;
   padding-right: 36px !important;
 }
 
 @media (min-width: 900px) and (max-width: 1199px) {
-  #earn .layout-a-main {
+  #earn .layout-a-main,
+  #join .layout-a-main {
     max-width: 920px !important;
     padding-right: 28px !important;
   }
 }
 
 @media (max-width: 899px) {
-  #earn .layout-a-main {
+  #earn .layout-a-main,
+  #join .layout-a-main {
     max-width: 100% !important;
     padding-right: 16px !important;
   }
 }
+
+/* ================= DEVELOPER & API KEYS (Supabase / AI Studio Style) ================= */
+.tok-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid #232328;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0d0d0f;
+}
+.tok-th {
+  background: #141418;
+  color: #8d8d92;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #232328;
+}
+.tok-tr {
+  transition: background-color 0.15s;
+}
+.tok-tr:hover {
+  background: #15151a;
+}
+.tok-td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #1a1a1f;
+  font-size: 14.5px;
+  color: #d6d6da;
+  vertical-align: middle;
+}
+.tok-tr:last-child .tok-td {
+  border-bottom: none;
+}
+.tok-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(201, 184, 255, 0.12);
+  color: #C9B8FF;
+  border: 1px solid rgba(201, 184, 255, 0.22);
+}
+.tok-badge.expired {
+  background: rgba(255, 255, 255, 0.06);
+  color: #71717a;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ================= DOCUMENTATION SCREEN (Supabase Docs style) ================= */
+#docs {
+  min-height: 100vh;
+  background: #0a0a0a;
+}
+.docs-header {
+  height: 54px;
+  border-bottom: 1px solid #1f1f23;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(10, 10, 10, 0.94);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+.docs-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid #1c1c20;
+  padding: 24px 16px;
+  overflow-y: auto;
+  height: calc(100vh - 54px);
+  position: sticky;
+  top: 54px;
+}
+.docs-content {
+  flex: 1;
+  min-width: 0;
+  padding: 36px 48px 120px;
+  max-width: 880px;
+}
+.docs-nav-group-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #71717a;
+  margin: 18px 0 8px 10px;
+}
+.docs-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.docs-nav-item:hover {
+  background: #18181c;
+  color: #fff;
+}
+.docs-nav-item.active {
+  background: #202028;
+  color: #C9B8FF;
+  font-weight: 500;
+}
+.docs-code-block {
+  background: #101013;
+  border: 1px solid #232329;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 16px 0;
+}
+.docs-code-header {
+  background: #16161b;
+  border-bottom: 1px solid #232329;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: #8d8d94;
+}
+
+/* ================= UMI PLUS UPGRADE ($49/mo - Screenshot 2 style) ================= */
+.plus-benefit-card {
+  background: #141418;
+  border: 1px solid #24242b;
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+}
+.plus-benefit-card:hover {
+  border-color: rgba(201, 184, 255, 0.4);
+  transform: translateY(-1px);
+}
+.plus-icon-tile {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #1e1e26;
+  border: 1px solid #2f2f3a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: #C9B8FF;
+  flex-shrink: 0;
+}
+.plus-upgrade-btn {
+  background: linear-gradient(135deg, #ec4899 0%, #a855f7 100%);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 12px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: opacity 0.18s ease, transform 0.15s ease;
+  user-select: none;
+  font-size: 16px;
+}
+.plus-upgrade-btn:hover {
+  opacity: 0.94;
+  transform: translateY(-1px);
+}
+
 
 
