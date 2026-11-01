@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 type Screen = 'disc' | 'earn' | 'prof' | 'pers' | 'camp' | 'join' | 'new' | 'wd' | 'dev' | 'docs';
 type CampaignTab = 'd' | 'j' | 'c';
 type PersonalTab = 'c' | 'r' | 'p' | 'i' | 's';
-type PersonalSettingsTab = 'd' | 'v' | 'b' | 'plus';
+type PersonalSettingsTab = 'd' | 'v' | 'b' | 'docs' | 'plus';
 type DevTab = 'asc' | 'sdk';
 type SdkLang = 'swift' | 'kotlin' | 'rn' | 'node' | 'curl';
 
@@ -1060,15 +1060,46 @@ export default function App() {
   const [simulatingClick, setSimulatingClick] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
 
-  // Umi Plus ($49/mo - Screenshot 2) Subscription state
-  const [isPlusSubscriber, setIsPlusSubscriber] = useState(false);
-  const [plusBillingCycle, setPlusBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  // Wallet & Add Funds state (Personal Payment section)
+  const [walletBalance, setWalletBalance] = useState(2000.0);
+  const [depositAmount, setDepositAmount] = useState(500);
+  const [depositPaymentStep, setDepositPaymentStep] = useState<'form' | 'checkout' | 'success'>('form');
+  const [depositPaymentMethod, setDepositPaymentMethod] = useState<'card' | 'apple' | 'google' | 'bank'>('card');
+  const [depositCardId, setDepositCardId] = useState(1);
+  const [claimOverlayOpen, setClaimOverlayOpen] = useState(false);
+
+  // Umi Pro ($69/mo or $55/mo annual) Upgrade State (upgrade-to-pro_5ab386f5.html)
+  const [isProSubscriber, setIsProSubscriber] = useState(false);
+  const isPlusSubscriber = isProSubscriber; // backwards compatibility alias
+  const setIsPlusSubscriber = setIsProSubscriber;
+  const [proPlan, setProPlan] = useState<'monthly' | 'annual'>('monthly');
+  const plusBillingCycle = proPlan; // compatibility alias
+  const setPlusBillingCycle = setProPlan;
+  const [proViewStep, setProViewStep] = useState<'plan' | 'checkout' | 'success'>('plan');
+  const [proPaymentMethod, setProPaymentMethod] = useState<'visa' | 'apple'>('visa');
+  const [proConsent, setProConsent] = useState(false);
+  const [proProcessing, setProProcessing] = useState(false);
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradingLoading, setUpgradingLoading] = useState(false);
   const [upgradeSuccess, setUpgradeSuccess] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState(1);
   const [upgradePromoCode, setUpgradePromoCode] = useState('');
   const [upgradePromoApplied, setUpgradePromoApplied] = useState(false);
+
+  // 2-Step Create API Key and Install SDK flow state (umi_create_api_key_and_install_sdk_v2_6d613e08.html)
+  const [sdkStep, setSdkStep] = useState<1 | 2>(1);
+  const [sdkKeyName, setSdkKeyName] = useState('');
+  const [sdkKeyCampaign, setSdkKeyCampaign] = useState('Palazzo Lens');
+  const [sdkKeyEnv, setSdkKeyEnv] = useState<'test' | 'live'>('test');
+  const [sdkKeyExp, setSdkKeyExp] = useState<'30 days' | '90 days' | 'Never'>('30 days');
+  const [sdkGeneratedKey, setSdkGeneratedKey] = useState<{ name: string; env: string; exp: string; val: string } | null>(null);
+  const [sdkKeyCopiedConsent, setSdkKeyCopiedConsent] = useState(false);
+  const [sdkKeyError, setSdkKeyError] = useState('');
+  const [sdkGenerating, setSdkGenerating] = useState(false);
+  const [sdkPackageMgr, setSdkPackageMgr] = useState<'spm' | 'pod'>('spm');
+  const [sdkSelectedKeyIdx, setSdkSelectedKeyIdx] = useState(0);
+  const [sdkVerificationStage, setSdkVerificationStage] = useState(0);
+  const [sdkVerifying, setSdkVerifying] = useState(false);
 
   const isLive = campaignState.asc && campaignState.sdk && campaignState.fund;
 
@@ -1092,9 +1123,12 @@ export default function App() {
     setCur(scr);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (scr === 'pers' && opt) {
-      if (opt === 'plus' || opt === 'b') {
+      if (opt === 'plus' || opt === 'b' || opt === 'pro') {
         setPtab('s');
         setSnTab('b');
+      } else if (opt === 'docs') {
+        setPtab('s');
+        setSnTab('docs');
       } else if (opt === 'v') {
         setPtab('s');
         setSnTab('v');
@@ -2645,50 +2679,482 @@ export default function App() {
               {/* TAB p: Payment */}
               {ptab === 'p' && (
                 <div className="pn" data-p="p">
-                  <div className="h2">Funding</div>
-                  <div
-                    className="card"
-                    style={{ marginTop: 18, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div id="fu1" style={{ fontSize: 18, lineHeight: '24px', fontWeight: 600 }}>
-                        {campaignState.fund
-                          ? 'Wallet funded · $2,000.00'
-                          : 'Add funds to your wallet'}
+                  {/* FORM VIEW: Add funds without background card */}
+                  {depositPaymentStep === 'form' && (
+                    <div>
+                      <div className="h2">Funding</div>
+                      <div className="sub" style={{ marginTop: 4 }}>
+                        Creators are paid from your wallet. Funds are reserved as soon as an earning is created.
                       </div>
+
+                      {/* Add funds section without any holding background card */}
+                      <div style={{ marginTop: 22, maxWidth: 620 }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            paddingBottom: 14,
+                            borderBottom: '1px solid rgba(255,255,255,0.08)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            fontSize: 16,
+                          }}
+                        >
+                          <i className="ti ti-wallet" style={{ fontSize: 22, color: '#C9B8FF' }} />
+                          <span>Add funds</span>
+                          <span className={`pill ${campaignState.fund ? 'l' : ''}`} style={{ marginLeft: 'auto' }}>
+                            {campaignState.fund ? 'Funded' : 'Deposit required'}
+                          </span>
+                        </div>
+
+                        <div style={{ marginTop: 18 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#8d8d94' }}>
+                            Amount
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              border: '1px solid #2d2d38',
+                              borderRadius: 10,
+                              height: 54,
+                              padding: '0 16px',
+                              marginTop: 8,
+                              background: '#16161c',
+                            }}
+                          >
+                            <span style={{ fontSize: 24, color: '#71717a', fontWeight: 600 }}>$</span>
+                            <input
+                              type="number"
+                              value={depositAmount || ''}
+                              onChange={e => {
+                                const val = Math.max(0, Number(e.target.value));
+                                setDepositAmount(val);
+                              }}
+                              placeholder="500"
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                outline: 'none',
+                                color: '#ffffff',
+                                fontSize: 24,
+                                fontWeight: 600,
+                                width: '100%',
+                              }}
+                            />
+                          </div>
+
+                          {/* Quick selection chips: $250, $500, $1,000, $2,500 */}
+                          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                            {[250, 500, 1000, 2500].map(amt => {
+                              const isSel = depositAmount === amt;
+                              return (
+                                <span
+                                  key={amt}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    height: 32,
+                                    padding: '0 14px',
+                                    borderRadius: 16,
+                                    border: isSel ? '1px solid #C9B8FF' : '1px solid #2b2b36',
+                                    background: isSel ? '#C9B8FF' : '#17171e',
+                                    color: isSel ? '#17141f' : '#b4b4b8',
+                                    fontSize: 13,
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                  onClick={() => setDepositAmount(amt)}
+                                >
+                                  ${amt.toLocaleString()}
+                                </span>
+                              );
+                            })}
+                          </div>
+
+                          {/* Wallet Summary */}
+                          <div
+                            style={{
+                              border: '1px solid #24242e',
+                              borderRadius: 10,
+                              padding: '12px 16px',
+                              marginTop: 18,
+                              background: '#14141a',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#9a9a9f', fontSize: 13.5 }}>
+                              <span>Wallet now</span>
+                              <b style={{ color: '#ffffff', fontWeight: 600 }}>
+                                ${walletBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </b>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#9a9a9f', fontSize: 13.5 }}>
+                              <span>After deposit</span>
+                              <b style={{ color: '#C9B8FF', fontWeight: 600 }}>
+                                ${(walletBalance + (depositAmount || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </b>
+                            </div>
+                          </div>
+
+                          {/* Continue to payment -> triggers dedicated full changed paying screen */}
+                          <div
+                            className="btn pr"
+                            style={{
+                              marginTop: 18,
+                              height: 46,
+                              background: '#C9B8FF',
+                              color: '#17141f',
+                              borderRadius: 9,
+                              fontWeight: 600,
+                              fontSize: 15,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 8,
+                              cursor: 'pointer',
+                              width: '100%',
+                              border: 'none',
+                            }}
+                            onClick={() => {
+                              if (!depositAmount || depositAmount <= 0) {
+                                showToast('Please enter a valid deposit amount.');
+                                return;
+                              }
+                              setDepositPaymentStep('checkout');
+                            }}
+                          >
+                            <i className="ti ti-credit-card" style={{ fontSize: 18 }} />
+                            <span>Continue to payment</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="dv" style={{ marginTop: 36, marginBottom: 28 }} />
+                      <div className="h2">Payment Methods</div>
+                      <div className="sub" style={{ marginTop: 4 }}>
+                        Choose accepted payment methods for deposits.
+                      </div>
+
+                      <div className="card" style={{ marginTop: 18, overflow: 'hidden' }}>
+                        <div className="rw">
+                          <div>
+                            <div className="a1">Cards</div>
+                            <div className="a2">
+                              Major credit and debit cards, Apple Pay and Google Pay are always accepted.
+                            </div>
+                          </div>
+                          <span className="pill l">On</span>
+                        </div>
+                        <div className="rw">
+                          <div>
+                            <div className="a1">Bank debit</div>
+                            <div className="a2">For large deposits. Settles over a few days.</div>
+                          </div>
+                          <span className="tg" onClick={e => e.currentTarget.classList.toggle('on')} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* FULL CHANGED ONE PAYING SCREEN ONLY FOR DEPOSIT */}
+                  {depositPaymentStep === 'checkout' && (
+                    <div>
                       <div
-                        id="fu2"
-                        style={{ marginTop: 4, fontSize: 15, lineHeight: '22px', color: '#a6a6aa' }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          color: '#C9B8FF',
+                          fontSize: 14,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          marginBottom: 20,
+                        }}
+                        onClick={() => setDepositPaymentStep('form')}
                       >
-                        Creators are paid from this wallet. Funds are reserved as soon as an earning
-                        is created.
+                        <i className="ti ti-arrow-left" style={{ fontSize: 16 }} />
+                        <span>Back to Payments</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 26, fontWeight: 700, color: '#fff', letterSpacing: -0.4 }}>
+                            Complete Deposit Payment
+                          </div>
+                          <div style={{ fontSize: 14, color: '#9a9a9f', marginTop: 4 }}>
+                            Authorize payment to credit your affiliate wallet and activate creator campaigns.
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#9be3c6', fontSize: 13, background: 'rgba(155, 227, 198, 0.1)', padding: '5px 12px', borderRadius: 20, border: '1px solid rgba(155, 227, 198, 0.25)' }}>
+                          <i className="ti ti-shield-check" style={{ fontSize: 16 }} />
+                          <span>256-bit encrypted Stripe checkout</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: isBelow900 ? '1fr' : '1.3fr 1fr', gap: 24, marginTop: 28, alignItems: 'start' }}>
+                        {/* Left: Payment Method Selection */}
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginBottom: 12 }}>
+                            Select Payment Method
+                          </div>
+
+                          {/* Payment Method Tabs */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 18 }}>
+                            {[
+                              { id: 'card', label: 'Card', icon: 'ti-credit-card' },
+                              { id: 'apple', label: 'Apple Pay', icon: 'ti-brand-apple' },
+                              { id: 'google', label: 'Google Pay', icon: 'ti-brand-google' },
+                              { id: 'bank', label: 'Bank', icon: 'ti-building-bank' },
+                            ].map(m => (
+                              <div
+                                key={m.id}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 6,
+                                  padding: '12px 6px',
+                                  borderRadius: 10,
+                                  border: depositPaymentMethod === m.id ? '1px solid #C9B8FF' : '1px solid #262632',
+                                  background: depositPaymentMethod === m.id ? 'rgba(201, 184, 255, 0.1)' : '#141418',
+                                  color: depositPaymentMethod === m.id ? '#C9B8FF' : '#9a9a9f',
+                                  cursor: 'pointer',
+                                  fontSize: 12.5,
+                                  fontWeight: 600,
+                                  transition: 'all 0.15s ease',
+                                }}
+                                onClick={() => setDepositPaymentMethod(m.id as 'card' | 'apple' | 'google' | 'bank')}
+                              >
+                                <i className={`ti ${m.icon}`} style={{ fontSize: 18 }} />
+                                <span>{m.label}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Card selector */}
+                          {depositPaymentMethod === 'card' && (
+                            <div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {cards.map(card => {
+                                  const isSelected = depositCardId === card.id;
+                                  return (
+                                    <div
+                                      key={card.id}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '12px 16px',
+                                        borderRadius: 10,
+                                        border: isSelected ? '1px solid #C9B8FF' : '1px solid #23232c',
+                                        background: isSelected ? '#191823' : '#141418',
+                                        cursor: 'pointer',
+                                      }}
+                                      onClick={() => setDepositCardId(card.id)}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                        <div style={{ width: 34, height: 24, borderRadius: 4, background: '#22222a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>
+                                          {card.b}
+                                        </div>
+                                        <div>
+                                          <div style={{ fontSize: 14.5, color: '#fff', fontWeight: 600 }}>{card.l}</div>
+                                          <div style={{ fontSize: 12.5, color: '#8d8d94' }}>Expires {card.e}</div>
+                                        </div>
+                                      </div>
+                                      <div
+                                        style={{
+                                          width: 18,
+                                          height: 18,
+                                          borderRadius: '50%',
+                                          border: isSelected ? '5px solid #C9B8FF' : '2px solid #555',
+                                          background: '#121216',
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  marginTop: 12,
+                                  color: '#C9B8FF',
+                                  fontSize: 13.5,
+                                  fontWeight: 500,
+                                  cursor: 'pointer',
+                                }}
+                                onClick={() => setAddCardOpen(true)}
+                              >
+                                <i className="ti ti-plus" />
+                                <span>Use a different card</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {depositPaymentMethod === 'apple' && (
+                            <div style={{ padding: 24, textAlign: 'center', borderRadius: 10, border: '1px solid #262632', background: '#141418' }}>
+                              <i className="ti ti-brand-apple" style={{ fontSize: 32, color: '#fff' }} />
+                              <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginTop: 8 }}>Apple Pay Ready</div>
+                              <div style={{ fontSize: 13, color: '#9a9a9f', marginTop: 4 }}>Touch ID / Face ID will be requested to authorize ${depositAmount.toFixed(2)}.</div>
+                            </div>
+                          )}
+
+                          {depositPaymentMethod === 'google' && (
+                            <div style={{ padding: 24, textAlign: 'center', borderRadius: 10, border: '1px solid #262632', background: '#141418' }}>
+                              <i className="ti ti-brand-google" style={{ fontSize: 30, color: '#fff' }} />
+                              <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginTop: 8 }}>Google Pay Ready</div>
+                              <div style={{ fontSize: 13, color: '#9a9a9f', marginTop: 4 }}>Fast checkout with your Google account.</div>
+                            </div>
+                          )}
+
+                          {depositPaymentMethod === 'bank' && (
+                            <div style={{ padding: 24, textAlign: 'center', borderRadius: 10, border: '1px solid #262632', background: '#141418' }}>
+                              <i className="ti ti-building-bank" style={{ fontSize: 30, color: '#C9B8FF' }} />
+                              <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginTop: 8 }}>ACH Direct Bank Debit</div>
+                              <div style={{ fontSize: 13, color: '#9a9a9f', marginTop: 4 }}>Standard ACH settlement within 2 business days. Instant funds advance.</div>
+                            </div>
+                          )}
+
+                          {/* Pay Button */}
+                          <div
+                            className={`btn pr ${fundingLoading ? 'loading' : ''}`}
+                            style={{
+                              marginTop: 24,
+                              height: 48,
+                              background: '#C9B8FF',
+                              color: '#17141f',
+                              borderRadius: 10,
+                              fontWeight: 700,
+                              fontSize: 16,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 8,
+                              cursor: fundingLoading ? 'wait' : 'pointer',
+                              width: '100%',
+                              border: 'none',
+                            }}
+                            onClick={() => {
+                              if (fundingLoading) return;
+                              setFundingLoading(true);
+                              setTimeout(() => {
+                                setWalletBalance(prev => prev + depositAmount);
+                                setCampaignState(prev => ({ ...prev, fund: true }));
+                                setFundingLoading(false);
+                                setDepositPaymentStep('success');
+                                showToast(`Deposit of $${depositAmount.toFixed(2)} completed!`);
+                              }, 1100);
+                            }}
+                          >
+                            {fundingLoading ? (
+                              <>
+                                <Spinner size={18} color="#17141f" />
+                                <span>Authorizing payment with Stripe…</span>
+                              </>
+                            ) : (
+                              <>
+                                <i className="ti ti-lock" style={{ fontSize: 17 }} />
+                                <span>Pay ${depositAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Now</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Right: Order / Deposit Breakdown */}
+                        <div style={{ padding: 20, borderRadius: 12, border: '1px solid #282834', background: '#14141a' }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', paddingBottom: 12, borderBottom: '1px solid #22222c' }}>
+                            Deposit Breakdown
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14, fontSize: 13.5 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9a9a9f' }}>
+                              <span>Deposit Amount</span>
+                              <span style={{ color: '#fff', fontWeight: 600 }}>${depositAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9a9a9f' }}>
+                              <span>Campaign Pool</span>
+                              <span style={{ color: '#fff' }}>Palazzo Lens</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9be3c6' }}>
+                              <span>Processing Fee</span>
+                              <span>$0.00 (Free)</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9a9a9f' }}>
+                              <span>Current Wallet</span>
+                              <span style={{ color: '#fff' }}>${walletBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#C9B8FF', paddingTop: 8, borderTop: '1px solid #22222c' }}>
+                              <span>New Wallet Balance</span>
+                              <span style={{ fontWeight: 700 }}>${(walletBalance + depositAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fff', fontSize: 18, fontWeight: 800, paddingTop: 10, borderTop: '1px solid #22222c', marginTop: 4 }}>
+                              <span>Total Due</span>
+                              <span>${depositAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div
-                      className={`btn wb ${fundingLoading ? 'loading' : ''}`}
-                      id="fub"
-                      style={{
-                        height: 42,
-                        fontSize: 16,
-                        padding: '0 20px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        opacity: fundingLoading ? 0.8 : 1,
-                        cursor: fundingLoading ? 'wait' : 'pointer',
-                      }}
-                      onClick={handleFundWallet}
-                    >
-                      {fundingLoading ? (
-                        <>
-                          <Spinner size={16} color="#000" />
-                          <span>Adding funds…</span>
-                        </>
-                      ) : (
-                        campaignState.fund ? 'Add more' : 'Add funds'
-                      )}
+                  )}
+
+                  {/* FULL CHANGED SUCCESS SCREEN */}
+                  {depositPaymentStep === 'success' && (
+                    <div style={{ textAlign: 'center', padding: '40px 16px', maxWidth: 540, margin: '0 auto' }}>
+                      <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#C9B8FF', color: '#17141f', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 20px' }}>
+                        <i className="ti ti-check" />
+                      </div>
+                      <div style={{ fontSize: 28, fontWeight: 700, color: '#fff' }}>
+                        Deposit Complete! 🎉
+                      </div>
+                      <div style={{ fontSize: 15, color: '#9a9a9f', marginTop: 8, lineHeight: 1.5 }}>
+                        ${depositAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} has been credited to your creator wallet. Your campaign is funded and ready.
+                      </div>
+
+                      <div style={{ marginTop: 28, background: '#14141a', border: '1px solid #24242e', borderRadius: 12, padding: 18, textAlign: 'left', fontSize: 13.5 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8d8d94' }}>
+                          <span>Transaction Ref</span>
+                          <span style={{ fontFamily: 'var(--font-mono)', color: '#fff' }}>#UMI-DEP-9824</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8d8d94', marginTop: 8 }}>
+                          <span>Amount Credited</span>
+                          <span style={{ color: '#C9B8FF', fontWeight: 600 }}>${depositAmount.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8d8d94', marginTop: 8 }}>
+                          <span>Updated Wallet Balance</span>
+                          <span style={{ color: '#fff', fontWeight: 700 }}>${walletBalance.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8d8d94', marginTop: 8 }}>
+                          <span>Campaign Status</span>
+                          <span style={{ color: '#9be3c6', fontWeight: 600 }}>Funded · Active</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 12, marginTop: 28, justifyContent: 'center' }}>
+                        <div
+                          className="btn sm"
+                          style={{ height: 42, padding: '0 20px', background: '#22222a', color: '#fff', fontSize: 14 }}
+                          onClick={() => setDepositPaymentStep('form')}
+                        >
+                          Back to Payments
+                        </div>
+                        <div
+                          className="btn pr sm"
+                          style={{ height: 42, padding: '0 20px', background: '#C9B8FF', color: '#17141f', fontSize: 14, fontWeight: 600 }}
+                          onClick={() => navigateTo('join')}
+                        >
+                          View Joined Campaign
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="dv" />
                   <div className="h2" style={{ marginTop: 32 }}>
@@ -2980,18 +3446,30 @@ export default function App() {
                       </div>
                       <div
                         className={snTab === 'b' ? 'a' : ''}
-                        onClick={() => setSnTab('b')}
+                        onClick={() => {
+                          setSnTab('b');
+                          setProViewStep('plan');
+                        }}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <i className="ti ti-heart" style={{ color: '#ec4899' }} />
-                          <span>Umi Plus</span>
+                          <i className="ti ti-crown" style={{ color: '#C9B8FF' }} />
+                          <span>umi Pro</span>
                         </div>
-                        {isPlusSubscriber && (
-                          <span style={{ fontSize: 10, background: '#ec4899', color: '#fff', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>
+                        {isProSubscriber && (
+                          <span style={{ fontSize: 10, background: '#C9B8FF', color: '#17141f', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>
                             ACTIVE
                           </span>
                         )}
+                      </div>
+
+                      <div
+                        className={snTab === 'docs' ? 'a' : ''}
+                        onClick={() => setSnTab('docs')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+                      >
+                        <i className="ti ti-book" />
+                        <span>Documentation</span>
                       </div>
                     </div>
 
@@ -3075,206 +3553,394 @@ export default function App() {
                         </div>
                       )}
 
-                      {snTab === 'b' && (
-                        <div className="spn" data-p="b">
-                          {/* Main Upgrade Card matching Screenshot 2 */}
-                          <div className="card" style={{ padding: 26, background: '#121215', borderColor: '#232328' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 14 }}>
-                              <div>
-                                <div style={{ fontSize: 14.5, color: '#a6a6aa', fontWeight: 500 }}>Upgrade to</div>
-                                <div style={{ fontSize: 26, fontWeight: 700, color: '#ec4899', letterSpacing: -0.3, marginTop: 2 }}>
-                                  Umi Plus
-                                </div>
-                              </div>
-
-                              {/* Monthly / Annual Toggle */}
-                              <div style={{ display: 'flex', background: '#1b1b20', padding: 3, borderRadius: 10, border: '1px solid #282830' }}>
-                                <div
-                                  style={{
-                                    padding: '6px 14px',
-                                    borderRadius: 7,
-                                    fontSize: 13.5,
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    background: plusBillingCycle === 'monthly' ? '#292933' : 'transparent',
-                                    color: plusBillingCycle === 'monthly' ? '#fff' : '#8d8d94',
-                                  }}
-                                  onClick={() => setPlusBillingCycle('monthly')}
-                                >
-                                  Monthly
-                                </div>
-                                <div
-                                  style={{
-                                    padding: '6px 14px',
-                                    borderRadius: 7,
-                                    fontSize: 13.5,
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    background: plusBillingCycle === 'annual' ? '#292933' : 'transparent',
-                                    color: plusBillingCycle === 'annual' ? '#fff' : '#8d8d94',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 6,
-                                  }}
-                                  onClick={() => setPlusBillingCycle('annual')}
-                                >
-                                  <span>Annual</span>
-                                  <span style={{ fontSize: 11, background: 'rgba(236, 72, 153, 0.2)', color: '#ec4899', padding: '1px 5px', borderRadius: 4 }}>
-                                    Save 20%
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Big Price: $49 per month */}
-                            <div style={{ marginTop: 16, display: 'flex', alignItems: 'baseline', gap: 12 }}>
-                              <span style={{ fontSize: 56, lineHeight: '62px', fontWeight: 700, letterSpacing: -1.5, color: '#ffffff' }}>
-                                {plusBillingCycle === 'monthly' ? '$49' : '$39'}
-                              </span>
-                              <span style={{ fontSize: 16, color: '#a6a6aa', fontWeight: 400 }}>
-                                {plusBillingCycle === 'monthly' ? 'Per month' : 'Per month · Billed annually ($468/yr)'}
-                              </span>
-                            </div>
-
-                            {/* Checklist */}
-                            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, color: '#ededf0', fontWeight: 500 }}>
-                                <i className="ti ti-check" style={{ color: '#ec4899', fontSize: 18, strokeWidth: 3 }} />
-                                <span>No Platform Fees (0% fee vs standard 5%)</span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, color: '#ededf0', fontWeight: 500 }}>
-                                <i className="ti ti-check" style={{ color: '#ec4899', fontSize: 18, strokeWidth: 3 }} />
-                                <span>Priority 24/7 Creator Support & SLA</span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 15, color: '#ededf0', fontWeight: 500 }}>
-                                <i className="ti ti-check" style={{ color: '#ec4899', fontSize: 18, strokeWidth: 3 }} />
-                                <span>5 Admins Included</span>
-                              </div>
-                            </div>
-
-                            {/* Main CTA */}
-                            <div
-                              className="plus-upgrade-btn"
-                              style={{ marginTop: 22, width: '100%' }}
-                              onClick={() => {
-                                if (isPlusSubscriber) {
-                                  showToast('Umi Plus is active · Next renewal Nov 29, 2026');
-                                } else {
-                                  setUpgradeModalOpen(true);
-                                }
-                              }}
-                            >
-                              {isPlusSubscriber ? (
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <i className="ti ti-circle-check" />
-                                  Manage Subscription (Active)
-                                </span>
-                              ) : (
-                                <span>Upgrade to Umi Plus</span>
-                              )}
-                            </div>
-
-                            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#8d8d94' }}>
-                              <span>Additional Admins</span>
-                              <span style={{ fontWeight: 500, color: '#d4d4d8' }}>$12 / mo</span>
-                            </div>
+                      {/* TAB docs: Documentation redirect button card in Personal Settings */}
+                      {snTab === 'docs' && (
+                        <div className="spn" data-p="docs">
+                          <div className="h2">Developer Documentation</div>
+                          <div className="sub" style={{ marginTop: 4 }}>
+                            Guides, SDK references, webhook event schemas, and integration documentation.
                           </div>
 
-                          {/* Benefits Section Header */}
-                          <div style={{ marginTop: 32 }}>
-                            <div style={{ fontSize: 18, fontWeight: 600, color: '#ec4899' }}>
-                              Umi Plus Benefits
-                            </div>
-                            <div style={{ fontSize: 14, color: '#9a9a9f', marginTop: 3 }}>
-                              Everything you need to scale your partner and referral ecosystem.
-                            </div>
-
-                            {/* Benefits 2x3 Grid matching Screenshot 2 */}
-                            <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: isBelow900 ? '1fr' : 'repeat(2, 1fr)', gap: 14 }}>
-                              <div className="plus-benefit-card">
-                                <div className="plus-icon-tile">
-                                  <span style={{ fontWeight: 700, fontSize: 18, color: '#ec4899' }}>$0</span>
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>
-                                    <s style={{ color: '#71717a', marginRight: 6 }}>5%</s> 0% Platform Fee
-                                  </div>
-                                  <div style={{ fontSize: 13.5, color: '#9a9a9f', marginTop: 4, lineHeight: '19px' }}>
-                                    Keep 100% of revenue from referral subscriptions with zero transaction markup.
-                                  </div>
+                          <div className="card" style={{ marginTop: 20, padding: 24, background: '#121215', borderColor: '#232328', borderRadius: 14 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                              <div style={{ width: 44, height: 44, borderRadius: 10, background: '#C9B8FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#17141f', fontSize: 24, flexShrink: 0 }}>
+                                <i className="ti ti-book" />
+                              </div>
+                              <div style={{ flex: 1, minWidth: 220 }}>
+                                <div style={{ fontSize: 18, fontWeight: 600, color: '#fff' }}>Umi Developer Center</div>
+                                <div style={{ fontSize: 14, color: '#9a9a9f', marginTop: 2 }}>
+                                  Full documentation for iOS (Swift), Android (Kotlin), React Native, and Node.js.
                                 </div>
                               </div>
-
-                              <div className="plus-benefit-card">
-                                <div className="plus-icon-tile">
-                                  <i className="ti ti-mail" style={{ fontSize: 22, color: '#ec4899' }} />
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>
-                                    5,000 Campaign Invites
-                                  </div>
-                                  <div style={{ fontSize: 13.5, color: '#9a9a9f', marginTop: 4, lineHeight: '19px' }}>
-                                    Directly invite high-impact creators every month with automated email notifications.
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="plus-benefit-card">
-                                <div className="plus-icon-tile">
-                                  <i className="ti ti-users" style={{ fontSize: 22, color: '#ec4899' }} />
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>
-                                    5 Team Admins Included
-                                  </div>
-                                  <div style={{ fontSize: 13.5, color: '#9a9a9f', marginTop: 4, lineHeight: '19px' }}>
-                                    Grant growth leads, managers, and finance teams role-based campaign permissions.
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="plus-benefit-card">
-                                <div className="plus-icon-tile">
-                                  <i className="ti ti-headset" style={{ fontSize: 22, color: '#ec4899' }} />
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>
-                                    Priority 24/7 Creator Support
-                                  </div>
-                                  <div style={{ fontSize: 13.5, color: '#9a9a9f', marginTop: 4, lineHeight: '19px' }}>
-                                    Dedicated partner manager and 1-hour response SLA on a direct Slack connect channel.
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="plus-benefit-card">
-                                <div className="plus-icon-tile">
-                                  <i className="ti ti-code" style={{ fontSize: 22, color: '#ec4899' }} />
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>
-                                    Webhooks & API Access
-                                  </div>
-                                  <div style={{ fontSize: 13.5, color: '#9a9a9f', marginTop: 4, lineHeight: '19px' }}>
-                                    Real-time attribution webhooks, raw CSV export, and high rate limits on all endpoints.
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="plus-benefit-card">
-                                <div className="plus-icon-tile">
-                                  <i className="ti ti-world" style={{ fontSize: 22, color: '#ec4899' }} />
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>
-                                    Custom Domain & Branding
-                                  </div>
-                                  <div style={{ fontSize: 13.5, color: '#9a9a9f', marginTop: 4, lineHeight: '19px' }}>
-                                    White-label referral links (e.g. refer.yourapp.com) and customizable creator landing cards.
-                                  </div>
-                                </div>
+                              <div
+                                className="btn wb"
+                                style={{ height: 40, padding: '0 18px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: '#C9B8FF', color: '#17141f', fontWeight: 600, borderRadius: 8 }}
+                                onClick={() => navigateTo('docs')}
+                              >
+                                <span>Open Full Documentation Tab</span>
+                                <i className="ti ti-arrow-right" style={{ fontSize: 15 }} />
                               </div>
                             </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: isBelow900 ? '1fr' : 'repeat(2, 1fr)', gap: 12, marginTop: 22 }}>
+                              <div
+                                style={{ padding: '14px 16px', borderRadius: 10, background: '#17171d', border: '1px solid #252530', cursor: 'pointer' }}
+                                onClick={() => navigateTo('docs', 'intro')}
+                              >
+                                <div style={{ fontSize: 14.5, fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <i className="ti ti-rocket" style={{ color: '#C9B8FF' }} /> Quickstart Guide
+                                </div>
+                                <div style={{ fontSize: 13, color: '#8d8d94', marginTop: 4 }}>Get up and running with attribution tracking in 5 minutes.</div>
+                              </div>
+
+                              <div
+                                style={{ padding: '14px 16px', borderRadius: 10, background: '#17171d', border: '1px solid #252530', cursor: 'pointer' }}
+                                onClick={() => navigateTo('docs', 'sdk')}
+                              >
+                                <div style={{ fontSize: 14.5, fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <i className="ti ti-brand-apple" style={{ color: '#C9B8FF' }} /> Mobile SDKs
+                                </div>
+                                <div style={{ fontSize: 13, color: '#8d8d94', marginTop: 4 }}>Swift, Kotlin, and React Native drop-in client libraries.</div>
+                              </div>
+
+                              <div
+                                style={{ padding: '14px 16px', borderRadius: 10, background: '#17171d', border: '1px solid #252530', cursor: 'pointer' }}
+                                onClick={() => navigateTo('docs', 'auth')}
+                              >
+                                <div style={{ fontSize: 14.5, fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <i className="ti ti-key" style={{ color: '#C9B8FF' }} /> API Keys & Scopes
+                                </div>
+                                <div style={{ fontSize: 13, color: '#8d8d94', marginTop: 4 }}>Test keys, live keys, token verification, and security scopes.</div>
+                              </div>
+
+                              <div
+                                style={{ padding: '14px 16px', borderRadius: 10, background: '#17171d', border: '1px solid #252530', cursor: 'pointer' }}
+                                onClick={() => navigateTo('docs', 'webhooks')}
+                              >
+                                <div style={{ fontSize: 14.5, fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <i className="ti ti-webhook" style={{ color: '#C9B8FF' }} /> Webhooks & Payouts
+                                </div>
+                                <div style={{ fontSize: 13, color: '#8d8d94', marginTop: 4 }}>Receive real-time subscription lifecycle webhooks.</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB b: Upgrade to Pro (from upgrade-to-pro_5ab386f5.html & umi_screens_pro_and_funds_79d67558.html) */}
+                      {snTab === 'b' && (
+                        <div className="spn" data-p="b">
+                          <div style={{ maxWidth: 720 }}>
+                            {/* 1. PLAN VIEW */}
+                            {proViewStep === 'plan' && (
+                              <section>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999, background: '#e5e2fd', color: '#5645be', fontSize: 12, fontWeight: 700 }}>
+                                  <i className="ti ti-crown" />
+                                  <span>umi Pro</span>
+                                </div>
+
+                                <h1 style={{ fontSize: isBelow900 ? 26 : 32, lineHeight: 1.15, margin: '14px 0 8px', fontWeight: 700, color: '#fff' }}>
+                                  Keep 100% of what you earn.
+                                </h1>
+                                <p style={{ color: '#9a9a9f', lineHeight: 1.5, fontSize: 15, margin: 0 }}>
+                                  Zero platform fees, daily payouts, and the tools to run campaigns at scale.
+                                </p>
+
+                                {/* Toggle Monthly / Annual */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: 4, background: '#1b1b22', borderRadius: 10, margin: '22px 0 18px', border: '1px solid #282834' }}>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      border: 0,
+                                      background: proPlan === 'monthly' ? '#272733' : 'transparent',
+                                      color: proPlan === 'monthly' ? '#fff' : '#9a9a9f',
+                                      padding: '11px',
+                                      borderRadius: 8,
+                                      font: 'inherit',
+                                      cursor: 'pointer',
+                                      fontWeight: proPlan === 'monthly' ? 700 : 500,
+                                      fontSize: 14,
+                                      transition: 'all 0.15s ease',
+                                    }}
+                                    onClick={() => setProPlan('monthly')}
+                                  >
+                                    Monthly
+                                  </button>
+                                  <button
+                                    type="button"
+                                    style={{
+                                      border: 0,
+                                      background: proPlan === 'annual' ? '#272733' : 'transparent',
+                                      color: proPlan === 'annual' ? '#fff' : '#9a9a9f',
+                                      padding: '11px',
+                                      borderRadius: 8,
+                                      font: 'inherit',
+                                      cursor: 'pointer',
+                                      fontWeight: proPlan === 'annual' ? 700 : 500,
+                                      fontSize: 14,
+                                      transition: 'all 0.15s ease',
+                                    }}
+                                    onClick={() => setProPlan('annual')}
+                                  >
+                                    Annual · save 20%
+                                  </button>
+                                </div>
+
+                                {/* Price display */}
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '10px 0 4px' }}>
+                                  <strong style={{ fontSize: isBelow900 ? 38 : 46, fontWeight: 700, color: '#fff' }}>
+                                    {proPlan === 'annual' ? '$55' : '$69'}
+                                  </strong>
+                                  <span style={{ color: '#9a9a9f', fontSize: 16 }}>per month</span>
+                                </div>
+                                <div style={{ color: '#8d8d94', fontSize: 13.5, marginBottom: 20 }}>
+                                  {proPlan === 'annual' ? 'Billed $660 once a year. You save $168.' : 'Cancel anytime. Billed monthly.'}
+                                </div>
+
+                                {/* 4 Key Features */}
+                                <div style={{ display: 'grid', gridTemplateColumns: isBelow900 ? '1fr' : 'repeat(2, 1fr)', gap: 12, margin: '20px 0' }}>
+                                  <div style={{ padding: 14, border: '1px solid #262632', borderRadius: 12, background: '#16161d' }}>
+                                    <b style={{ display: 'block', marginBottom: 4, color: '#fff', fontSize: 15 }}>No platform fee</b>
+                                    <span style={{ fontSize: 13, color: '#9a9a9f', lineHeight: 1.4 }}>Remove the 10% fee on creator earnings.</span>
+                                  </div>
+                                  <div style={{ padding: 14, border: '1px solid #262632', borderRadius: 12, background: '#16161d' }}>
+                                    <b style={{ display: 'block', marginBottom: 4, color: '#fff', fontSize: 15 }}>Daily payout runs</b>
+                                    <span style={{ fontSize: 13, color: '#9a9a9f', lineHeight: 1.4 }}>Get eligible earnings paid every day.</span>
+                                  </div>
+                                  <div style={{ padding: 14, border: '1px solid #262632', borderRadius: 12, background: '#16161d' }}>
+                                    <b style={{ display: 'block', marginBottom: 4, color: '#fff', fontSize: 15 }}>Unlimited keys</b>
+                                    <span style={{ fontSize: 13, color: '#9a9a9f', lineHeight: 1.4 }}>Use test and live keys with webhooks.</span>
+                                  </div>
+                                  <div style={{ padding: 14, border: '1px solid #262632', borderRadius: 12, background: '#16161d' }}>
+                                    <b style={{ display: 'block', marginBottom: 4, color: '#fff', fontSize: 15 }}>5 team seats</b>
+                                    <span style={{ fontSize: 13, color: '#9a9a9f', lineHeight: 1.4 }}>Invite teammates without sharing a login.</span>
+                                  </div>
+                                </div>
+
+                                {/* Free vs Pro comparison table */}
+                                <h2 style={{ fontSize: 18, fontWeight: 600, color: '#fff', margin: '22px 0 10px' }}>Free vs Pro</h2>
+                                <div style={{ border: '1px solid #262632', borderRadius: 12, overflow: 'hidden', fontSize: 13.5, margin: '14px 0 24px', background: '#15151c' }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '10px 14px', background: '#1c1c25', fontSize: 12, color: '#9a9a9f', fontWeight: 700, textTransform: 'uppercase' }}>
+                                    <div>Feature</div><div>Free</div><div style={{ color: '#C9B8FF' }}>Pro</div>
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '11px 14px', borderTop: '1px solid #24242f', color: '#dedee2' }}>
+                                    <div>Platform fee</div><div>10%</div><div style={{ color: '#C9B8FF', fontWeight: 600 }}>0%</div>
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '11px 14px', borderTop: '1px solid #24242f', color: '#dedee2' }}>
+                                    <div>Active campaigns</div><div>3</div><div style={{ color: '#C9B8FF', fontWeight: 600 }}>Unlimited</div>
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '11px 14px', borderTop: '1px solid #24242f', color: '#dedee2' }}>
+                                    <div>Payout runs</div><div>Weekly</div><div style={{ color: '#C9B8FF', fontWeight: 600 }}>Daily</div>
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '11px 14px', borderTop: '1px solid #24242f', color: '#dedee2' }}>
+                                    <div>Analytics history</div><div>30 days</div><div style={{ color: '#C9B8FF', fontWeight: 600 }}>2 years</div>
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '11px 14px', borderTop: '1px solid #24242f', color: '#dedee2' }}>
+                                    <div>Team seats</div><div>1</div><div style={{ color: '#C9B8FF', fontWeight: 600 }}>5</div>
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '11px 14px', borderTop: '1px solid #24242f', color: '#dedee2' }}>
+                                    <div>Support</div><div>Standard</div><div style={{ color: '#C9B8FF', fontWeight: 600 }}>Priority</div>
+                                  </div>
+                                </div>
+
+                                {/* Primary Button */}
+                                <button
+                                  type="button"
+                                  style={{
+                                    width: '100%',
+                                    border: 0,
+                                    borderRadius: 10,
+                                    padding: '14px 18px',
+                                    font: 'inherit',
+                                    fontWeight: 700,
+                                    fontSize: 15,
+                                    cursor: isProSubscriber ? 'default' : 'pointer',
+                                    background: isProSubscriber ? '#22222b' : '#C9B8FF',
+                                    color: isProSubscriber ? '#8d8d94' : '#17141f',
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                  disabled={isProSubscriber}
+                                  onClick={() => setProViewStep('checkout')}
+                                >
+                                  {isProSubscriber ? 'You’re on Pro' : 'Upgrade to Pro'}
+                                </button>
+                                <div style={{ textAlign: 'center', fontSize: 12.5, color: '#8d8d94', marginTop: 10 }}>
+                                  Secure payment with Stripe · Receipt after every charge
+                                </div>
+                              </section>
+                            )}
+
+                            {/* 2. CHECKOUT VIEW */}
+                            {proViewStep === 'checkout' && (
+                              <section>
+                                <button
+                                  type="button"
+                                  style={{
+                                    border: 0,
+                                    background: '#202029',
+                                    color: '#fff',
+                                    borderRadius: 8,
+                                    padding: '8px 14px',
+                                    fontSize: 13,
+                                    cursor: 'pointer',
+                                    marginBottom: 16,
+                                  }}
+                                  onClick={() => setProViewStep('plan')}
+                                >
+                                  ← Back to plan
+                                </button>
+
+                                <h2 style={{ margin: '0 0 6px', fontSize: 24, fontWeight: 700, color: '#fff' }}>
+                                  Upgrade to Pro
+                                </h2>
+                                <p style={{ color: '#9a9a9f', margin: 0, fontSize: 14 }}>
+                                  Review your plan and choose a payment method.
+                                </p>
+
+                                <div style={{ border: '1px solid #262632', borderRadius: 12, padding: '4px 16px', margin: '18px 0', background: '#16161d' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #24242e', fontSize: 14, color: '#dedee2' }}>
+                                    <span>umi Pro · {proPlan === 'annual' ? 'Annual' : 'Monthly'}</span>
+                                    <b style={{ color: '#fff' }}>{proPlan === 'annual' ? '$660.00' : '$69.00'}</b>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #24242e', fontSize: 14, color: '#dedee2' }}>
+                                    <span>Tax</span>
+                                    <b style={{ color: '#fff' }}>$0.00</b>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', fontSize: 16, fontWeight: 700, color: '#fff' }}>
+                                    <strong>Total today</strong>
+                                    <strong style={{ color: '#C9B8FF' }}>{proPlan === 'annual' ? '$660.00' : '$69.00'}</strong>
+                                  </div>
+                                </div>
+
+                                <h3 style={{ fontSize: 16, fontWeight: 600, color: '#fff', margin: '18px 0 10px' }}>
+                                  Payment method
+                                </h3>
+
+                                <label
+                                  style={{
+                                    display: 'flex',
+                                    gap: 12,
+                                    alignItems: 'center',
+                                    border: proPaymentMethod === 'visa' ? '1px solid #C9B8FF' : '1px solid #252530',
+                                    borderRadius: 10,
+                                    padding: 14,
+                                    margin: '8px 0',
+                                    cursor: 'pointer',
+                                    background: proPaymentMethod === 'visa' ? '#1c1b25' : '#16161d',
+                                  }}
+                                  onClick={() => setProPaymentMethod('visa')}
+                                >
+                                  <input type="radio" name="promethod" checked={proPaymentMethod === 'visa'} onChange={() => setProPaymentMethod('visa')} style={{ accentColor: '#C9B8FF' }} />
+                                  <span style={{ fontSize: 14, color: '#fff' }}>
+                                    Visa •••• 4417<br />
+                                    <small style={{ color: '#8d8d94' }}>Expires 08/28</small>
+                                  </span>
+                                </label>
+
+                                <label
+                                  style={{
+                                    display: 'flex',
+                                    gap: 12,
+                                    alignItems: 'center',
+                                    border: proPaymentMethod === 'apple' ? '1px solid #C9B8FF' : '1px solid #252530',
+                                    borderRadius: 10,
+                                    padding: 14,
+                                    margin: '8px 0',
+                                    cursor: 'pointer',
+                                    background: proPaymentMethod === 'apple' ? '#1c1b25' : '#16161d',
+                                  }}
+                                  onClick={() => setProPaymentMethod('apple')}
+                                >
+                                  <input type="radio" name="promethod" checked={proPaymentMethod === 'apple'} onChange={() => setProPaymentMethod('apple')} style={{ accentColor: '#C9B8FF' }} />
+                                  <span style={{ fontSize: 14, color: '#fff' }}>Apple Pay</span>
+                                </label>
+
+                                <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: '20px 0 16px', fontSize: 13, color: '#9a9a9f', lineHeight: 1.4, cursor: 'pointer' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={proConsent}
+                                    onChange={e => setProConsent(e.target.checked)}
+                                    style={{ accentColor: '#C9B8FF', marginTop: 2 }}
+                                  />
+                                  <span>I agree to the Terms and that my plan renews automatically until I cancel.</span>
+                                </label>
+
+                                <button
+                                  type="button"
+                                  style={{
+                                    width: '100%',
+                                    border: 0,
+                                    borderRadius: 10,
+                                    padding: '14px 18px',
+                                    font: 'inherit',
+                                    fontWeight: 700,
+                                    fontSize: 15,
+                                    cursor: (!proConsent || proProcessing) ? 'not-allowed' : 'pointer',
+                                    background: '#C9B8FF',
+                                    color: '#17141f',
+                                    opacity: (!proConsent || proProcessing) ? 0.55 : 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                  }}
+                                  disabled={!proConsent || proProcessing}
+                                  onClick={() => {
+                                    setProProcessing(true);
+                                    setTimeout(() => {
+                                      setProProcessing(false);
+                                      setIsProSubscriber(true);
+                                      setProViewStep('success');
+                                      showToast('Welcome to umi Pro!');
+                                    }, 1000);
+                                  }}
+                                >
+                                  {proProcessing ? (
+                                    <>
+                                      <Spinner size={16} color="#17141f" />
+                                      <span>Processing payment…</span>
+                                    </>
+                                  ) : (
+                                    <span>Pay {proPlan === 'annual' ? '$660.00' : '$69.00'}</span>
+                                  )}
+                                </button>
+                                <div style={{ textAlign: 'center', fontSize: 12.5, color: '#8d8d94', marginTop: 10 }}>
+                                  Payments are processed securely by Stripe.
+                                </div>
+                              </section>
+                            )}
+
+                            {/* 3. SUCCESS VIEW */}
+                            {proViewStep === 'success' && (
+                              <section style={{ textAlign: 'center', padding: '24px 0' }}>
+                                <div style={{ width: 62, height: 62, display: 'grid', placeItems: 'center', margin: '0 auto 16px', borderRadius: '50%', background: '#e5f4e4', color: '#008300', fontSize: 30 }}>
+                                  ✓
+                                </div>
+                                <h2 style={{ fontSize: 26, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+                                  You’re on umi Pro
+                                </h2>
+                                <p style={{ color: '#9a9a9f', margin: '0 0 24px', fontSize: 15 }}>
+                                  Zero platform fees start now.
+                                </p>
+                                <button
+                                  type="button"
+                                  style={{
+                                    border: 0,
+                                    borderRadius: 10,
+                                    padding: '12px 28px',
+                                    font: 'inherit',
+                                    fontWeight: 700,
+                                    fontSize: 14.5,
+                                    cursor: 'pointer',
+                                    background: '#C9B8FF',
+                                    color: '#17141f',
+                                  }}
+                                  onClick={() => setProViewStep('plan')}
+                                >
+                                  Back to Pro
+                                </button>
+                              </section>
+                            )}
                           </div>
                         </div>
                       )}
@@ -3854,62 +4520,123 @@ export default function App() {
 
             <div className="dv" style={{ marginTop: 28 }} />
 
-            {/* Your Link and Code (Minimized Accent Card) */}
             <div style={{ marginTop: 24 }}>
               {!codeClaimed ? (
                 <div
+                  className="card"
                   style={{
                     borderRadius: 14,
-                    background: '#C9B8FF',
-                    color: '#17141f',
-                    padding: '14px 18px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 14,
-                    flexWrap: 'wrap',
+                    background: '#121216',
+                    border: '1px solid #242430',
+                    padding: isBelow900 ? '20px 16px' : '28px 24px',
+                    textAlign: 'center',
+                    maxWidth: 580,
+                    margin: '0 auto',
+                    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.4)',
                   }}
                 >
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#17141f' }}>
-                      Your link and code
-                    </div>
-                    <div style={{ fontSize: 13, color: '#382f55', marginTop: 2 }}>
-                      Claim your personal link, QR code, and creator code to start tracking.
-                    </div>
-                  </div>
-
                   <div
-                    className={`btn bk ${claimingLoading ? 'loading' : ''}`}
-                    id="cb"
                     style={{
-                      height: 38,
-                      padding: '0 16px',
-                      fontSize: 14,
-                      fontWeight: 600,
-                      display: 'inline-flex',
+                      display: 'flex',
                       alignItems: 'center',
                       gap: 8,
-                      background: '#17141f',
+                      paddingBottom: 14,
+                      borderBottom: '1px solid rgba(255,255,255,0.06)',
+                      fontWeight: 600,
                       color: '#fff',
-                      border: 'none',
-                      borderRadius: 8,
-                      cursor: claimingLoading ? 'wait' : 'pointer',
-                      opacity: claimingLoading ? 0.85 : 1,
+                      fontSize: 15,
                     }}
-                    onClick={handleClaimCode}
                   >
-                    {claimingLoading ? (
-                      <>
-                        <Spinner size={14} color="#fff" />
-                        <span>Generating…</span>
-                      </>
-                    ) : (
-                      <>
-                        <i className="ti ti-sparkles" style={{ fontSize: 15 }} />
-                        <span>Claim code</span>
-                      </>
-                    )}
+                    <i className="ti ti-ticket" style={{ fontSize: 20, color: '#C9B8FF' }} />
+                    <span>Claim your code</span>
+                    <span className="pill l" style={{ marginLeft: 'auto' }}>Approved</span>
+                  </div>
+
+                  <div style={{ padding: '16px 12px 6px' }}>
+                    <div
+                      style={{
+                        width: 58,
+                        height: 58,
+                        borderRadius: 14,
+                        background: '#C9B8FF',
+                        color: '#2b2150',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 30,
+                        margin: '6px auto 0',
+                      }}
+                    >
+                      <i className="ti ti-camera" />
+                    </div>
+
+                    <div style={{ fontSize: 22, fontWeight: 600, color: '#fff', marginTop: 12 }}>
+                      Palazzo Lens
+                    </div>
+
+                    <div style={{ color: '#9a9a9f', marginTop: 6, fontSize: 14.5, lineHeight: '22px' }}>
+                      You’re approved. Claim your personal link, QR code and creator code to start earning 20% of every subscription.
+                    </div>
+
+                    {/* 3 perks list */}
+                    <div style={{ textAlign: 'left', margin: '20px auto 0', maxWidth: 280, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', color: '#fff', fontSize: 14 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: '#C9B8FF', color: '#2b2150', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                          <i className="ti ti-link" />
+                        </div>
+                        <span>A personal link and QR code</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', color: '#fff', fontSize: 14 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: '#C9B8FF', color: '#2b2150', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                          <i className="ti ti-keyboard" />
+                        </div>
+                        <span>A creator code to type in the app</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center', color: '#fff', fontSize: 14 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: '#C9B8FF', color: '#2b2150', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>
+                          <i className="ti ti-lock" />
+                        </div>
+                        <span>Permanent. You can’t change it later.</span>
+                      </div>
+                    </div>
+
+                    {/* Claim code CTA */}
+                    <div
+                      className={`btn pr ${claimingLoading ? 'loading' : ''}`}
+                      id="cb"
+                      style={{
+                        marginTop: 22,
+                        height: 44,
+                        padding: '0 24px',
+                        fontSize: 15,
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        background: '#C9B8FF',
+                        color: '#2b2150',
+                        border: 'none',
+                        borderRadius: 10,
+                        cursor: claimingLoading ? 'wait' : 'pointer',
+                        width: '100%',
+                        maxWidth: 260,
+                        marginInline: 'auto',
+                      }}
+                      onClick={handleClaimCode}
+                    >
+                      {claimingLoading ? (
+                        <>
+                          <Spinner size={16} color="#2b2150" />
+                          <span>Claiming your code…</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="ti ti-ticket" style={{ fontSize: 18 }} />
+                          <span>Claim code</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -5512,168 +6239,571 @@ export default function App() {
               </div>
             )}
 
-            {/* TAB 2: SDK SETUP ("taking the SDK" - multi-platform) */}
+            {/* TAB 2: SDK SETUP - 2-Step Flow from umi_create_api_key_and_install_sdk_v2_6d613e08.html */}
             {devTab === 'sdk' && (
               <div className="dp2">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 27, lineHeight: '36px', fontWeight: 600, letterSpacing: -0.4 }}>
-                      SDK Integration & Quickstart
-                    </div>
-                    <div className="sub" style={{ marginTop: 4 }}>
-                      Select your framework to integrate the Umi attribution SDK and track referrals.
-                    </div>
-                  </div>
-                  <span
-                    className={`pill ${campaignState.sdk ? 'l' : ''}`}
-                    id="sc2"
-                    style={{ marginTop: 4 }}
+                {/* 2-Step Tab Bar */}
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      height: 38,
+                      padding: '0 16px',
+                      borderRadius: 10,
+                      border: sdkStep === 1 ? '1px solid #C9B8FF' : '1px solid #282834',
+                      background: sdkStep === 1 ? '#C9B8FF' : '#15151b',
+                      color: sdkStep === 1 ? '#2b2150' : '#8d8d94',
+                      cursor: 'pointer',
+                      fontSize: 13.5,
+                      fontWeight: sdkStep === 1 ? 600 : 500,
+                      transition: 'all 0.15s ease',
+                    }}
+                    onClick={() => setSdkStep(1)}
                   >
-                    {campaignState.sdk ? 'Connected' : 'Not connected'}
-                  </span>
+                    <i className="ti ti-key" style={{ fontSize: 16 }} />
+                    <span>1. Create API key</span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      height: 38,
+                      padding: '0 16px',
+                      borderRadius: 10,
+                      border: sdkStep === 2 ? '1px solid #C9B8FF' : '1px solid #282834',
+                      background: sdkStep === 2 ? '#C9B8FF' : '#15151b',
+                      color: sdkStep === 2 ? '#2b2150' : '#8d8d94',
+                      cursor: 'pointer',
+                      fontSize: 13.5,
+                      fontWeight: sdkStep === 2 ? 600 : 500,
+                      transition: 'all 0.15s ease',
+                    }}
+                    onClick={() => {
+                      if (!sdkGeneratedKey && apiKeys.length === 0) {
+                        setSdkKeyError('Create a key first, then you can install the SDK.');
+                        setSdkStep(1);
+                        return;
+                      }
+                      setSdkStep(2);
+                    }}
+                  >
+                    <i className="ti ti-package" style={{ fontSize: 16 }} />
+                    <span>2. Install the SDK</span>
+                  </div>
                 </div>
 
-                {/* Language Switcher Tabs */}
-                <div style={{ marginTop: 20, display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 6 }}>
-                  {(['swift', 'kotlin', 'rn', 'node', 'curl'] as SdkLang[]).map(lang => {
-                    const isSel = selectedSdkLang === lang;
-                    const plat = SDK_PLATFORMS[lang];
-                    return (
-                      <div
-                        key={lang}
-                        style={{
-                          height: 38,
-                          padding: '0 14px',
-                          borderRadius: 8,
-                          background: isSel ? '#C9B8FF' : '#151518',
-                          color: isSel ? '#0a0a0a' : '#c4c4c8',
-                          fontSize: 13.5,
-                          fontWeight: 600,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 7,
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                          border: isSel ? '1px solid #C9B8FF' : '1px solid #232328',
-                          transition: 'all 0.15s ease',
-                        }}
-                        onClick={() => setSelectedSdkLang(lang)}
-                      >
-                        <i className={`ti ${plat.icon}`} style={{ fontSize: 16 }} />
-                        <span>{plat.name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* STEP 1: CREATE API KEY */}
+                {sdkStep === 1 && (
+                  <div className="card" style={{ padding: 22, background: '#121216', border: '1px solid #23232c', borderRadius: 14, maxWidth: 640 }}>
+                    {sdkGeneratedKey ? (
+                      <div>
+                        <div style={{ textAlign: 'center', marginTop: 8 }}>
+                          <div style={{ width: 48, height: 48, borderRadius: 12, background: '#C9B8FF', color: '#2b2150', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto' }}>
+                            <i className="ti ti-check" />
+                          </div>
+                          <div style={{ fontSize: 20, fontWeight: 600, color: '#fff', marginTop: 12 }}>
+                            Key created
+                          </div>
+                          <div style={{ color: '#9a9a9f', fontSize: 14, marginTop: 4 }}>
+                            {sdkGeneratedKey.name} · {sdkGeneratedKey.env.toUpperCase()} · expires {sdkGeneratedKey.exp === 'Never' ? 'never' : `in ${sdkGeneratedKey.exp}`}
+                          </div>
+                        </div>
 
-                {/* Steps for selected SDK */}
-                <div id="ss" style={{ marginTop: 24 }}>
-                  {SDK_PLATFORMS[selectedSdkLang].steps.map((step, idx) => (
-                    <div key={step.title} style={{ display: 'flex', gap: 14, marginTop: 24 }}>
-                      <span className="nbx">{idx + 1}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 17, fontWeight: 600, color: '#fff' }}>{step.title}</div>
-                        <div style={{ fontSize: 13.5, color: '#9a9a9f', marginTop: 3 }}>{step.desc}</div>
-                        <div style={{ position: 'relative', marginTop: 10 }}>
-                          <pre
-                            style={{
-                              background: '#101013',
-                              border: '1px solid #232329',
-                              borderRadius: 10,
-                              padding: '12px 48px 12px 14px',
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: 13,
-                              lineHeight: '20px',
-                              color: '#d8d8dc',
-                              overflowX: 'auto',
-                              margin: 0,
-                            }}
-                          >
-                            <code>{step.code}</code>
-                          </pre>
-                          <div
-                            style={{
-                              position: 'absolute',
-                              right: 10,
-                              top: 10,
-                              width: 28,
-                              height: 28,
-                              borderRadius: 6,
-                              background: '#1d1d23',
-                              border: '1px solid #2a2a34',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              color: '#a6a6aa',
-                            }}
+                        {/* Copyable Key Codebox */}
+                        <div style={{ border: '1px solid #262632', borderRadius: 10, background: '#17171e', padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 13, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, wordBreak: 'break-all', gap: 10 }}>
+                          <span style={{ color: '#9be3c6' }}>{sdkGeneratedKey.val}</span>
+                          <span
+                            className="btn sm"
+                            style={{ height: 28, padding: '0 10px', fontSize: 12, flexShrink: 0, background: '#252530', color: '#fff' }}
                             onClick={() => {
-                              navigator.clipboard?.writeText(step.code);
-                              showToast('Code snippet copied');
+                              navigator.clipboard?.writeText(sdkGeneratedKey.val);
+                              showToast('API key copied to clipboard');
                             }}
-                            title="Copy code"
                           >
                             <i className="ti ti-copy" style={{ fontSize: 14 }} />
+                          </span>
+                        </div>
+
+                        <div style={{ border: '1px solid #262632', borderRadius: 10, padding: 12, marginTop: 14, background: '#16161c', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                          <i className="ti ti-info-circle" style={{ fontSize: 18, color: '#C9B8FF', flexShrink: 0, marginTop: 1 }} />
+                          <div style={{ fontSize: 13.5, color: '#9a9a9f', lineHeight: 1.4 }}>
+                            This key is public and safe to put in your app. You can copy it again from the key list.
                           </div>
+                        </div>
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, cursor: 'pointer', fontSize: 13.5, color: '#dedee2' }}>
+                          <input
+                            type="checkbox"
+                            checked={sdkKeyCopiedConsent}
+                            onChange={e => {
+                              setSdkKeyCopiedConsent(e.target.checked);
+                              setSdkKeyError('');
+                            }}
+                            style={{ accentColor: '#C9B8FF' }}
+                          />
+                          <span>I’ve copied this key and I’m ready to add it to my app.</span>
+                        </label>
+
+                        {sdkKeyError && (
+                          <div style={{ color: '#f05252', fontSize: 13, marginTop: 6 }}>
+                            {sdkKeyError}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                          <span
+                            className="btn sm"
+                            style={{ height: 36, padding: '0 14px', background: '#1c1c24', color: '#fff' }}
+                            onClick={() => {
+                              setSdkGeneratedKey(null);
+                              setSdkKeyCopiedConsent(false);
+                              setSdkKeyName('');
+                            }}
+                          >
+                            <i className="ti ti-plus" style={{ fontSize: 14, marginRight: 6 }} />
+                            Create another
+                          </span>
+                          <span
+                            className="btn pr sm"
+                            style={{ height: 36, padding: '0 18px', background: '#C9B8FF', color: '#2b2150', fontWeight: 600 }}
+                            onClick={() => {
+                              if (!sdkKeyCopiedConsent) {
+                                setSdkKeyError('Confirm you’ve copied the key to continue.');
+                                return;
+                              }
+                              setSdkStep(2);
+                            }}
+                          >
+                            <span>Continue to SDK setup</span>
+                            <i className="ti ti-arrow-right" style={{ fontSize: 14, marginLeft: 6 }} />
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div>
+                          <div style={{ fontSize: 19, fontWeight: 600, color: '#fff' }}>Create API key</div>
+                          <div style={{ color: '#9a9a9f', fontSize: 14, marginTop: 2 }}>
+                            Keys let your app report installs and purchases to umi.
+                          </div>
+                        </div>
+
+                        {sdkKeyError && (
+                          <div style={{ padding: '8px 12px', border: '1px solid rgba(240, 82, 82, 0.3)', borderRadius: 8, background: 'rgba(240, 82, 82, 0.1)', color: '#f05252', fontSize: 13, marginTop: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <i className="ti ti-alert-triangle" />
+                            <span>{sdkKeyError}</span>
+                          </div>
+                        )}
+
+                        <label style={{ fontSize: 12.5, fontWeight: 600, color: '#8d8d94', marginTop: 16, display: 'block' }}>Key name</label>
+                        <input
+                          className="fi"
+                          placeholder="Palazzo Lens production"
+                          value={sdkKeyName}
+                          onChange={e => {
+                            setSdkKeyName(e.target.value);
+                            setSdkKeyError('');
+                          }}
+                          style={{ width: '100%', marginTop: 5, height: 42 }}
+                        />
+
+                        <label style={{ fontSize: 12.5, fontWeight: 600, color: '#8d8d94', marginTop: 14, display: 'block' }}>Campaign</label>
+                        <select
+                          className="fi"
+                          value={sdkKeyCampaign}
+                          onChange={e => setSdkKeyCampaign(e.target.value)}
+                          style={{ width: '100%', marginTop: 5, height: 42, background: '#16161d', color: '#fff' }}
+                        >
+                          <option>Palazzo Lens</option>
+                          <option>Tidal</option>
+                          <option>Lumen Habit</option>
+                        </select>
+
+                        <label style={{ fontSize: 12.5, fontWeight: 600, color: '#8d8d94', marginTop: 14, display: 'block' }}>Environment</label>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              height: 32,
+                              padding: '0 14px',
+                              borderRadius: 16,
+                              border: sdkKeyEnv === 'test' ? '1px solid #C9B8FF' : '1px solid #282834',
+                              background: sdkKeyEnv === 'test' ? '#C9B8FF' : '#17171e',
+                              color: sdkKeyEnv === 'test' ? '#2b2150' : '#b4b4b8',
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => setSdkKeyEnv('test')}
+                          >
+                            <i className="ti ti-flask" />
+                            Test
+                          </span>
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              height: 32,
+                              padding: '0 14px',
+                              borderRadius: 16,
+                              border: sdkKeyEnv === 'live' ? '1px solid #C9B8FF' : '1px solid #282834',
+                              background: sdkKeyEnv === 'live' ? '#C9B8FF' : '#17171e',
+                              color: sdkKeyEnv === 'live' ? '#2b2150' : '#b4b4b8',
+                              fontSize: 13,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => setSdkKeyEnv('live')}
+                          >
+                            <i className="ti ti-rocket" />
+                            Live
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12.5, color: '#8d8d94', marginTop: 6 }}>
+                          {sdkKeyEnv === 'test' ? 'Test keys never earn creators money. Use while you build.' : 'Live keys count toward payouts. Use in a released app.'}
+                        </div>
+
+                        <label style={{ fontSize: 12.5, fontWeight: 600, color: '#8d8d94', marginTop: 14, display: 'block' }}>Expires</label>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                          {(['30 days', '90 days', 'Never'] as const).map(x => (
+                            <span
+                              key={x}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                height: 30,
+                                padding: '0 14px',
+                                borderRadius: 15,
+                                border: sdkKeyExp === x ? '1px solid #C9B8FF' : '1px solid #282834',
+                                background: sdkKeyExp === x ? '#C9B8FF' : '#17171e',
+                                color: sdkKeyExp === x ? '#2b2150' : '#b4b4b8',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                              onClick={() => setSdkKeyExp(x)}
+                            >
+                              {x}
+                            </span>
+                          ))}
+                        </div>
+
+                        <div style={{ border: '1px solid #262632', borderRadius: 10, padding: '12px 14px', marginTop: 18, background: '#16161d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                          <span style={{ fontSize: 13, color: '#8d8d94' }}>One key belongs to one campaign.</span>
+                          <span
+                            className={`btn pr sm ${sdkGenerating ? 'loading' : ''}`}
+                            style={{ height: 36, padding: '0 16px', background: '#C9B8FF', color: '#2b2150', fontWeight: 600, border: 'none' }}
+                            onClick={() => {
+                              const n = sdkKeyName.trim();
+                              if (!n) {
+                                setSdkKeyError('Give the key a name.');
+                                return;
+                              }
+                              setSdkGenerating(true);
+                              setTimeout(() => {
+                                const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789';
+                                let rand = '';
+                                for (let i = 0; i < 24; i++) rand += alphabet[Math.floor(Math.random() * alphabet.length)];
+                                const fullVal = `umi_${sdkKeyEnv}_${rand}`;
+                                const newKeyObj: ApiKeyItem = {
+                                  id: `key-${Date.now()}`,
+                                  name: n,
+                                  keyMasked: `umi_${sdkKeyEnv}_${rand.slice(0, 2)}••••••••••••••••${rand.slice(-5)}`,
+                                  fullKey: fullVal,
+                                  created: 'Just now',
+                                  lastUsed: 'Never',
+                                  expires: sdkKeyExp,
+                                  status: 'active',
+                                  scopes: ['events:track', 'referrals:read', 'purchases:report'],
+                                };
+                                setApiKeys(prev => [newKeyObj, ...prev]);
+                                setSdkGeneratedKey({ name: n, env: sdkKeyEnv, exp: sdkKeyExp, val: fullVal });
+                                setSdkGenerating(false);
+                                showToast(`Created key: ${n}`);
+                              }, 800);
+                            }}
+                          >
+                            {sdkGenerating ? (
+                              <>
+                                <Spinner size={14} color="#2b2150" />
+                                <span>Generating…</span>
+                              </>
+                            ) : (
+                              <>
+                                <i className="ti ti-key" style={{ fontSize: 14 }} />
+                                <span>Generate key</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* STEP 2: INSTALL THE SDK */}
+                {sdkStep === 2 && (
+                  <div className="card" style={{ padding: 22, background: '#121216', border: '1px solid #23232c', borderRadius: 14, maxWidth: 680 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 20, fontWeight: 600, color: '#fff' }}>Install the SDK</div>
+                        <div style={{ color: '#9a9a9f', fontSize: 14, marginTop: 2 }}>
+                          Add umi to your app so referrals and purchases are verified.
+                        </div>
+                      </div>
+                      <span
+                        className="pill"
+                        style={{
+                          background: campaignState.sdk ? '#C9B8FF' : '#1f1f28',
+                          color: campaignState.sdk ? '#2b2150' : '#8d8d94',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {campaignState.sdk ? 'Connected' : 'Not connected'}
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 12px', borderRadius: 14, background: '#C9B8FF', color: '#2b2150', fontSize: 12.5, fontWeight: 600 }}>
+                        <i className="ti ti-brand-swift" /> iOS · Swift
+                      </span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 12px', borderRadius: 14, background: '#1c1c24', color: '#6f6f74', fontSize: 12.5, opacity: 0.6 }}>
+                        Android · soon
+                      </span>
+                    </div>
+
+                    {/* Step 1: Install Package */}
+                    <div style={{ display: 'flex', gap: 14, marginTop: 20 }}>
+                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#C9B8FF', color: '#2b2150', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        1
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#fff', fontSize: 15 }}>Install the package</div>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                          <span
+                            style={{
+                              height: 26,
+                              padding: '0 10px',
+                              borderRadius: 13,
+                              border: sdkPackageMgr === 'spm' ? '1px solid #C9B8FF' : '1px solid #282834',
+                              background: sdkPackageMgr === 'spm' ? '#C9B8FF' : '#17171e',
+                              color: sdkPackageMgr === 'spm' ? '#2b2150' : '#8d8d94',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => setSdkPackageMgr('spm')}
+                          >
+                            Swift Package Manager
+                          </span>
+                          <span
+                            style={{
+                              height: 26,
+                              padding: '0 10px',
+                              borderRadius: 13,
+                              border: sdkPackageMgr === 'pod' ? '1px solid #C9B8FF' : '1px solid #282834',
+                              background: sdkPackageMgr === 'pod' ? '#C9B8FF' : '#17171e',
+                              color: sdkPackageMgr === 'pod' ? '#2b2150' : '#8d8d94',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => setSdkPackageMgr('pod')}
+                          >
+                            CocoaPods
+                          </span>
+                        </div>
+
+                        <div style={{ border: '1px solid #262632', borderRadius: 8, background: '#16161d', padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                          <span>{sdkPackageMgr === 'spm' ? '// Swift Package Manager\nhttps://github.com/umi/umi-ios' : "pod 'Umi', '~> 1.0'"}</span>
+                          <span
+                            className="btn sm"
+                            style={{ height: 26, padding: '0 8px', background: '#22222b', color: '#fff' }}
+                            onClick={() => {
+                              navigator.clipboard?.writeText(sdkPackageMgr === 'spm' ? 'https://github.com/umi/umi-ios' : "pod 'Umi', '~> 1.0'");
+                              showToast('Package url copied');
+                            }}
+                          >
+                            <i className="ti ti-copy" style={{ fontSize: 13 }} />
+                          </span>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
 
-                {/* Step 5: Verify connection */}
-                <div style={{ display: 'flex', gap: 14, marginTop: 32, borderTop: '1px solid #1f1f22', paddingTop: 24 }}>
-                  <span className="nbx">5</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 18, fontWeight: 600 }}>Verify the connection</div>
-                    <div style={{ marginTop: 4, fontSize: 14.5, color: '#a6a6aa' }}>
-                      Run your app with your API key, then send a test ping from here.
-                    </div>
-                    <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                      <span
-                        id="vb"
-                        className={`btn wb sm ${devTesting ? 'loading' : ''}`}
-                        style={{
-                          height: 38,
-                          padding: '0 18px',
-                          fontSize: 14.5,
-                          fontWeight: 600,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          opacity: devTesting ? 0.8 : 1,
-                          cursor: devTesting ? 'wait' : 'pointer',
-                        }}
-                        onClick={() => {
-                          if (devTesting) return;
-                          setDevTesting(true);
-                          setDevTestStatus('Listening for test event payload…');
-                          setTimeout(() => {
-                            setCampaignState(prev => ({ ...prev, sdk: true }));
-                            setDevTestStatus('Connected · 200 OK test event received');
-                            setDevTesting(false);
-                            showToast('Test event successfully received from SDK');
-                          }, 1200);
-                        }}
-                      >
-                        {devTesting ? (
-                          <>
-                            <Spinner size={14} color="#000" />
-                            <span>Listening…</span>
-                          </>
-                        ) : (
-                          'Send test event'
-                        )}
+                    {/* Step 2: Add your key */}
+                    <div style={{ display: 'flex', gap: 14, marginTop: 22 }}>
+                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#C9B8FF', color: '#2b2150', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        2
                       </span>
-                      {devTestStatus && (
-                        <span id="vs" style={{ fontSize: 14.5, color: '#C9B8FF', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <i className="ti ti-circle-check" style={{ fontSize: 16 }} />
-                          {devTestStatus}
-                        </span>
-                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#fff', fontSize: 15 }}>Add your key</div>
+                        <select
+                          className="fi"
+                          style={{ width: '100%', marginTop: 8, height: 38, background: '#16161d', color: '#fff', fontSize: 13 }}
+                          value={sdkSelectedKeyIdx}
+                          onChange={e => setSdkSelectedKeyIdx(Number(e.target.value))}
+                        >
+                          {apiKeys.map((k, i) => (
+                            <option key={k.id} value={i}>
+                              {k.name} · {k.keyMasked}
+                            </option>
+                          ))}
+                        </select>
+
+                        <div style={{ border: '1px solid #262632', borderRadius: 8, background: '#16161d', padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                          <span>
+                            <span style={{ color: '#C9B8FF' }}>Umi</span>.configure(appKey: <span style={{ color: '#9be3c6' }}>"{apiKeys[sdkSelectedKeyIdx]?.fullKey || apiKeys[sdkSelectedKeyIdx]?.keyMasked || 'umi_live_8f2kQ4mT9x'}"</span>)
+                          </span>
+                          <span
+                            className="btn sm"
+                            style={{ height: 26, padding: '0 8px', background: '#22222b', color: '#fff' }}
+                            onClick={() => {
+                              const code = `Umi.configure(appKey: "${apiKeys[sdkSelectedKeyIdx]?.fullKey || apiKeys[sdkSelectedKeyIdx]?.keyMasked || 'umi_live_8f2kQ4mT9x'}")`;
+                              navigator.clipboard?.writeText(code);
+                              showToast('Config snippet copied');
+                            }}
+                          >
+                            <i className="ti ti-copy" style={{ fontSize: 13 }} />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 3: Resolve the referral */}
+                    <div style={{ display: 'flex', gap: 14, marginTop: 22 }}>
+                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#C9B8FF', color: '#2b2150', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        3
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#fff', fontSize: 15 }}>Resolve the referral</div>
+                        <div style={{ border: '1px solid #262632', borderRadius: 8, background: '#16161d', padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                          <span>
+                            <span style={{ color: '#C9B8FF' }}>Umi</span>.resolveReferral()<br />
+                            <span style={{ color: '#6f6f74' }}>// No referral? Show a code field:</span><br />
+                            <span style={{ color: '#C9B8FF' }}>Umi</span>.claimCreatorCode(code)
+                          </span>
+                          <span
+                            className="btn sm"
+                            style={{ height: 26, padding: '0 8px', background: '#22222b', color: '#fff' }}
+                            onClick={() => {
+                              navigator.clipboard?.writeText('Umi.resolveReferral()\n// No referral? Show a code field:\nUmi.claimCreatorCode(code)');
+                              showToast('Referral resolution snippet copied');
+                            }}
+                          >
+                            <i className="ti ti-copy" style={{ fontSize: 13 }} />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 4: Bind and report purchases */}
+                    <div style={{ display: 'flex', gap: 14, marginTop: 22 }}>
+                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#C9B8FF', color: '#2b2150', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        4
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#fff', fontSize: 15 }}>Bind and report purchases</div>
+                        <div style={{ border: '1px solid #262632', borderRadius: 8, background: '#16161d', padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                          <span>
+                            <span style={{ color: '#C9B8FF' }}>Umi</span>.bind(appAccountToken: token)<br />
+                            <span style={{ color: '#6f6f74' }}>// after a purchase</span><br />
+                            <span style={{ color: '#C9B8FF' }}>Umi</span>.reportTransaction(transaction.id)
+                          </span>
+                          <span
+                            className="btn sm"
+                            style={{ height: 26, padding: '0 8px', background: '#22222b', color: '#fff' }}
+                            onClick={() => {
+                              navigator.clipboard?.writeText('Umi.bind(appAccountToken: token)\n// after a purchase\nUmi.reportTransaction(transaction.id)');
+                              showToast('Purchase tracking snippet copied');
+                            }}
+                          >
+                            <i className="ti ti-copy" style={{ fontSize: 13 }} />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 5: Verify the connection */}
+                    <div style={{ display: 'flex', gap: 14, marginTop: 24, borderTop: '1px solid #22222b', paddingTop: 20 }}>
+                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#C9B8FF', color: '#2b2150', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        5
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#fff', fontSize: 15 }}>Verify the connection</div>
+                        {sdkVerificationStage === 0 ? (
+                          <span
+                            className="btn pr sm"
+                            style={{ marginTop: 10, height: 36, padding: '0 16px', background: '#C9B8FF', color: '#2b2150', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                            onClick={() => {
+                              setSdkVerifying(true);
+                              setSdkVerificationStage(1);
+                              setTimeout(() => {
+                                setSdkVerificationStage(2);
+                                setTimeout(() => {
+                                  setSdkVerificationStage(3);
+                                  setTimeout(() => {
+                                    setSdkVerificationStage(4);
+                                    setSdkVerifying(false);
+                                    setCampaignState(prev => ({ ...prev, sdk: true }));
+                                    showToast('SDK connection successfully verified');
+                                  }, 750);
+                                }, 750);
+                              }, 750);
+                            }}
+                          >
+                            <i className="ti ti-send" />
+                            <span>Send test event</span>
+                          </span>
+                        ) : (
+                          <div style={{ marginTop: 12, maxWidth: 380 }}>
+                            {['API key is valid', 'App Store is connected', 'Test event received'].map((txt, idx) => {
+                              const stepNum = idx + 1;
+                              if (stepNum > sdkVerificationStage) return null;
+                              const isDone = sdkVerificationStage > stepNum || sdkVerificationStage === 4;
+                              return (
+                                <div key={txt} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', fontSize: 13.5, color: '#dedee2' }}>
+                                  <span>{txt}</span>
+                                  {isDone ? (
+                                    <i className="ti ti-circle-check" style={{ color: '#C9B8FF', fontSize: 18 }} />
+                                  ) : (
+                                    <Spinner size={14} color="#C9B8FF" />
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Progress bar */}
+                            <div style={{ height: 4, borderRadius: 2, background: '#242430', marginTop: 10, overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  height: '100%',
+                                  borderRadius: 2,
+                                  background: '#C9B8FF',
+                                  width: `${Math.round(((sdkVerificationStage - 1) / 3) * 100)}%`,
+                                  transition: 'width 0.3s ease',
+                                }}
+                              />
+                            </div>
+
+                            {sdkVerificationStage === 4 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontWeight: 600, color: '#C9B8FF', fontSize: 14.5 }}>
+                                <i className="ti ti-circle-check" style={{ fontSize: 18 }} />
+                                <span>SDK connected</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -5991,7 +7121,16 @@ export default function App() {
           </div>
           <div id="nl">
             {NOTIFICATIONS.map((item, idx) => (
-              <div key={idx} className="ni">
+              <div
+                key={idx}
+                className="ni"
+                style={{ cursor: item.title === 'Palazzo Lens' ? 'pointer' : 'default' }}
+                onClick={() => {
+                  if (item.title === 'Palazzo Lens') {
+                    navigateTo('join');
+                  }
+                }}
+              >
                 <div
                   style={{
                     width: 40, // 40 CSS px avatars
@@ -6593,12 +7732,12 @@ export default function App() {
                   {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(236, 72, 153, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
-                        <i className="ti ti-sparkles" style={{ fontSize: 18 }} />
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(201, 184, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#C9B8FF' }}>
+                        <i className="ti ti-crown" style={{ fontSize: 18 }} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 19, fontWeight: 700, color: '#fff' }}>Subscribe to Umi Plus</div>
-                        <div style={{ fontSize: 13, color: '#8d8d94' }}>Instant activation & 0% platform fees</div>
+                        <div style={{ fontSize: 19, fontWeight: 700, color: '#fff' }}>Upgrade to umi Pro</div>
+                        <div style={{ fontSize: 13, color: '#8d8d94' }}>Keep 100% of earnings & 0% platform fees</div>
                       </div>
                     </div>
                     <i
@@ -6612,27 +7751,27 @@ export default function App() {
                   <div style={{ marginTop: 20, background: '#191920', border: '1px solid #282832', borderRadius: 12, padding: '16px 18px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <span style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>Umi Plus Plan</span>
-                        <span style={{ marginLeft: 8, fontSize: 12, background: 'rgba(236, 72, 153, 0.2)', color: '#ec4899', padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>
-                          {plusBillingCycle === 'monthly' ? 'Monthly' : 'Annual'}
+                        <span style={{ fontSize: 16, fontWeight: 600, color: '#fff' }}>umi Pro Plan</span>
+                        <span style={{ marginLeft: 8, fontSize: 12, background: 'rgba(201, 184, 255, 0.15)', color: '#C9B8FF', padding: '2px 6px', borderRadius: 4, fontWeight: 600 }}>
+                          {plusBillingCycle === 'monthly' ? 'Monthly' : 'Annual (Save 20%)'}
                         </span>
                       </div>
                       <span style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
-                        {plusBillingCycle === 'monthly' ? '$49.00 / mo' : '$468.00 / yr'}
+                        {plusBillingCycle === 'monthly' ? '$69.00 / mo' : '$660.00 / yr'}
                       </span>
                     </div>
 
                     <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #22222b', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13.5 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9a9a9f' }}>
                         <span>Subtotal</span>
-                        <span>{plusBillingCycle === 'monthly' ? '$49.00' : '$468.00'}</span>
+                        <span>{plusBillingCycle === 'monthly' ? '$69.00' : '$660.00'}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9be3c6' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#C9B8FF' }}>
                         <span>Platform Transaction Fee</span>
-                        <span>0% (Normally 5%)</span>
+                        <span>0% (Normally 10%)</span>
                       </div>
                       {upgradePromoApplied && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ec4899' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9be3c6' }}>
                           <span>Promo Discount (VIPCREATOR)</span>
                           <span>-$10.00</span>
                         </div>
@@ -6640,7 +7779,7 @@ export default function App() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fff', fontWeight: 700, fontSize: 16, marginTop: 4, paddingTop: 6, borderTop: '1px solid #22222b' }}>
                         <span>Total Due Today</span>
                         <span>
-                          ${upgradePromoApplied ? (plusBillingCycle === 'monthly' ? '39.00' : '458.00') : (plusBillingCycle === 'monthly' ? '49.00' : '468.00')}
+                          ${upgradePromoApplied ? (plusBillingCycle === 'monthly' ? '59.00' : '650.00') : (plusBillingCycle === 'monthly' ? '69.00' : '660.00')}
                         </span>
                       </div>
                     </div>
@@ -6733,26 +7872,31 @@ export default function App() {
                         opacity: upgradingLoading ? 0.8 : 1,
                         cursor: upgradingLoading ? 'wait' : 'pointer',
                         gap: 8,
+                        background: '#C9B8FF',
+                        color: '#17141f',
+                        fontWeight: 600,
+                        borderRadius: 10,
                       }}
                       onClick={() => {
                         if (upgradingLoading) return;
                         setUpgradingLoading(true);
                         setTimeout(() => {
                           setUpgradingLoading(false);
+                          setIsProSubscriber(true);
                           setIsPlusSubscriber(true);
                           setUpgradeSuccess(true);
-                          showToast('Welcome to Umi Plus!');
+                          showToast('Welcome to umi Pro!');
                         }, 1300);
                       }}
                     >
                       {upgradingLoading ? (
                         <>
-                          <Spinner size={16} color="#fff" />
+                          <Spinner size={16} color="#17141f" />
                           <span>Authorizing with Stripe…</span>
                         </>
                       ) : (
                         <span>
-                          Pay ${upgradePromoApplied ? (plusBillingCycle === 'monthly' ? '39.00' : '458.00') : (plusBillingCycle === 'monthly' ? '49.00' : '468.00')} & Start
+                          Pay ${upgradePromoApplied ? (plusBillingCycle === 'monthly' ? '59.00' : '650.00') : (plusBillingCycle === 'monthly' ? '69.00' : '660.00')} & Start
                         </span>
                       )}
                     </div>
@@ -6761,24 +7905,24 @@ export default function App() {
               ) : (
                 /* Success Receipt Screen */
                 <div style={{ textAlign: 'center', padding: '12px 6px' }}>
-                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg, #ec4899 0%, #a855f7 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#fff', fontSize: 28 }}>
+                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#C9B8FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#17141f', fontSize: 28 }}>
                     <i className="ti ti-check" />
                   </div>
                   <div style={{ fontSize: 24, fontWeight: 700, color: '#fff' }}>
-                    Welcome to Umi Plus! 🎉
+                    Welcome to umi Pro! 🎉
                   </div>
                   <div style={{ fontSize: 14.5, color: '#a6a6aa', marginTop: 6, lineHeight: '22px' }}>
-                    Your subscription is active. You now have 0% platform fees, 5 team admins, full API access, and priority support.
+                    Your subscription is active. You now have 0% platform fees, 5 team seats, unlimited keys, and daily payout runs.
                   </div>
 
                   <div style={{ marginTop: 20, background: '#181820', border: '1px solid #262630', borderRadius: 12, padding: '14px 18px', textAlign: 'left', fontSize: 13.5 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8d8d94' }}>
                       <span>Receipt Number</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', color: '#fff' }}>#UMI-SUB-9024</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', color: '#fff' }}>#UMI-PRO-9024</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8d8d94', marginTop: 6 }}>
                       <span>Billing Cycle</span>
-                      <span style={{ color: '#fff' }}>{plusBillingCycle === 'monthly' ? '$49.00/mo' : '$468.00/yr'}</span>
+                      <span style={{ color: '#fff' }}>{plusBillingCycle === 'monthly' ? '$69.00/mo' : '$660.00/yr'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#8d8d94', marginTop: 6 }}>
                       <span>Next Renewal</span>
@@ -6788,7 +7932,7 @@ export default function App() {
 
                   <div
                     className="plus-upgrade-btn"
-                    style={{ marginTop: 24, width: '100%', height: 44 }}
+                    style={{ marginTop: 24, width: '100%', height: 44, background: '#C9B8FF', color: '#17141f', fontWeight: 600, borderRadius: 10 }}
                     onClick={() => {
                       setUpgradeSuccess(false);
                       setUpgradeModalOpen(false);
